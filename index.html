@@ -7,6 +7,12 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Atlas 3D World Explorer</title>
 
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+<link rel="preconnect" href="https://tile.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://api.cesium.com" crossorigin>
+<link rel="preconnect" href="https://assets.ion.cesium.com" crossorigin>
+<link rel="dns-prefetch" href="https://tile.googleapis.com">
+
 <link id="cesiumCss" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cesium/1.119.0/Widgets/widgets.css">
 <script>
 window.CESIUM_BASE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/cesium/1.119.0/';
@@ -867,6 +873,7 @@ if (window.Cesium) {
       </div>
       <div class="hud-controls">
         <button class="hud-btn" id="camSwitchBtn" type="button">Cam: Chase</button>
+        <button class="hud-btn" id="qualityBtn" type="button">Quality: Auto</button>
         <button class="hud-btn" id="pauseBtn" type="button">Pause</button>
       </div>
       <div class="hud-plate" id="speedPlate">
@@ -1448,10 +1455,179 @@ function waitForCesium() {
   });
 }
 
+/* ────────────────────────────────────────────────────────────
+   Render quality
+
+   Two knobs dominate how this looks and how fast it loads:
+
+   1. Render resolution. Cesium defaults to useBrowserRecommendedResolution,
+      which pins the drawing buffer to CSS pixels and ignores devicePixelRatio.
+      On a phone at DPR 3 that renders a third of the linear resolution and
+      upscales it, which is most of the "soft even once loaded" look. We drive
+      the pixel ratio ourselves instead.
+   2. maximumScreenSpaceError on the photorealistic tileset. Lower means Cesium
+      demands finer tiles for the same screen area — sharper, but more to
+      download.
+
+   Both cost frame time, so the tiers below pair them and 'auto' walks the
+   ladder from an FPS estimate rather than guessing from the user agent alone.
+   ──────────────────────────────────────────────────────────── */
+var QUALITY_TIERS = [
+  { id: 'performance', label: 'Performance', pixelRatio: 1.0, sse: 20, dsseFactor: 30, msaa: 1, cacheMB: 192 },
+  { id: 'balanced',    label: 'Balanced',    pixelRatio: 1.5, sse: 12, dsseFactor: 24, msaa: 1, cacheMB: 320 },
+  { id: 'high',        label: 'High',        pixelRatio: 2.0, sse: 8,  dsseFactor: 18, msaa: 1, cacheMB: 512 },
+  { id: 'ultra',       label: 'Ultra',       pixelRatio: 3.0, sse: 5,  dsseFactor: 12, msaa: 2, cacheMB: 768 }
+];
+
+var qualityAuto = true;
+var qualityIdx = 2;
+var qualityBase = QUALITY_TIERS[2];
+
+function isHandheld() {
+  return ('ontouchstart' in window || navigator.maxTouchPoints > 0) &&
+         Math.min(screen.width, screen.height) < 820;
+}
+
+// A first guess, before any frame has been drawn.
+function guessQualityIndex() {
+  var mem = navigator.deviceMemory || 0;
+  var cores = navigator.hardwareConcurrency || 0;
+  if (isHandheld()) {
+    if (mem && mem <= 3) return 1;
+    return 2;
+  }
+
+  if ((mem && mem <= 4) || (cores && cores <= 4)) return 1;
+  return 3;
+}
+
+function loadQualityPref() {
+  try {
+    var v = localStorage.getItem('atlas_quality');
+    if (!v) return;
+    if (v === 'auto') { qualityAuto = true; return; }
+    for (var i = 0; i < QUALITY_TIERS.length; i++) {
+      if (QUALITY_TIERS[i].id === v) { qualityAuto = false; qualityIdx = i; return; }
+    }
+  } catch (e) {}
+}
+
+function saveQualityPref() {
+  try { localStorage.setItem('atlas_quality', qualityAuto ? 'auto' : QUALITY_TIERS[qualityIdx].id); }
+  catch (e) {}
+}
+
+function effectivePixelRatio(tier) {
+  // Drawing above the panel's own pixel ratio is pure supersampling — it costs
+  // real fill rate and buys nothing a phone can show, so cap at native.
+  return Math.min(tier.pixelRatio, window.devicePixelRatio || 1);
+}
+
+function applyQuality() {
+  qualityBase = QUALITY_TIERS[qualityIdx];
+  var btn = $('qualityBtn');
+  if (btn) btn.textContent = 'Quality: ' + (qualityAuto ? 'Auto' : qualityBase.label);
+  if (!viewer || !scene) return;
+
+  var dpr = window.devicePixelRatio || 1;
+  var target = effectivePixelRatio(qualityBase);
+  viewer.useBrowserRecommendedResolution = false;
+  viewer.resolutionScale = target / dpr;
+
+  try { scene.msaaSamples = qualityBase.msaa; } catch (e) {}
+  // FXAA is a blur filter chosen to hide stair-steps at 1 device pixel. Once
+  // we're drawing 2+ real pixels per CSS pixel it removes more detail than
+  // aliasing it was hiding, so it comes off at the high tiers.
+  try { scene.postProcessStages.fxaa.enabled = target < 1.75; } catch (e) {}
+
+  applyTilesetQuality();
+  updateTileDetail();
+}
+
+function applyTilesetQuality() {
+  if (!photoTileset) return;
+  try {
+    // Keeps the foreground crisp while letting the horizon stay coarse, which
+    // is what makes a low SSE affordable at street level.
+    photoTileset.dynamicScreenSpaceError = true;
+    photoTileset.dynamicScreenSpaceErrorDensity = 2.0e-4;
+    photoTileset.dynamicScreenSpaceErrorFactor = qualityBase.dsseFactor;
+    photoTileset.dynamicScreenSpaceErrorHeightFalloff = 0.25;
+    // The Google helper asks for a 1.5 GB cache, which a phone will not survive.
+    photoTileset.cacheBytes = qualityBase.cacheMB * 1024 * 1024;
+    photoTileset.maximumCacheOverflowBytes = Math.round(qualityBase.cacheMB * 0.5) * 1024 * 1024;
+  } catch (e) {}
+}
+
+function cycleQuality() {
+  if (qualityAuto) { qualityAuto = false; qualityIdx = 0; }
+  else if (qualityIdx >= QUALITY_TIERS.length - 1) { qualityAuto = true; qualityIdx = guessQualityIndex(); }
+  else { qualityIdx++; }
+  saveQualityPref();
+  applyQuality();
+  showToast('Quality: ' + (qualityAuto ? 'Auto' : QUALITY_TIERS[qualityIdx].label));
+}
+
+/* The auto governor. Frame times are noisy, so decisions are made on windows
+   of frames and a step up has to earn several good windows in a row. */
+var qWindowFrames = 0;
+var qWindowStart = 0;
+var qGoodWindows = 0;
+var qBadWindows = 0;
+var qLastChange = 0;
+var qWarmupUntil = 0;
+
+function autoQualityCeiling() {
+  return isHandheld() ? 2 : QUALITY_TIERS.length - 1;
+}
+
+function updateAutoQuality(now) {
+  if (!qualityAuto || !viewer) return;
+  if (!qWindowStart) { qWindowStart = now; qWindowFrames = 0; return; }
+  qWindowFrames++;
+  var elapsed = now - qWindowStart;
+  if (elapsed < 1500) return;
+
+  var fps = (qWindowFrames * 1000) / elapsed;
+  qWindowStart = now;
+  qWindowFrames = 0;
+
+  // The first seconds after launch are dominated by tile decoding, not by the
+  // settings — judging them would drop quality exactly while the user watches
+  // the scene come in, and then never climb back until they move.
+  if (now < qWarmupUntil) return;
+
+  // Give tiles a few seconds to settle after a change before judging it.
+  if (now - qLastChange < 4000) return;
+
+  if (fps < 26 && qualityIdx > 0) {
+    qBadWindows++;
+    qGoodWindows = 0;
+    if (qBadWindows >= 2) {
+      qualityIdx--;
+      qBadWindows = 0;
+      qLastChange = now;
+      applyQuality();
+    }
+  } else if (fps > 54 && qualityIdx < autoQualityCeiling()) {
+    qBadWindows = 0;
+    qGoodWindows++;
+    if (qGoodWindows >= 3) {
+      qualityIdx++;
+      qGoodWindows = 0;
+      qLastChange = now;
+      applyQuality();
+    }
+  } else {
+    qGoodWindows = 0;
+    qBadWindows = 0;
+  }
+}
+
 function attachPhotoreal(tileset) {
   if (!tileset || isPhotorealActive) return;
   photoTileset = tileset;
-  photoTileset.maximumScreenSpaceError = 16;
+  applyTilesetQuality();
   scene.primitives.add(photoTileset);
   isPhotorealActive = true;
   sceneStatus.photoreal = true;
@@ -1519,13 +1695,51 @@ async function buildFallbackScene() {
       defaultColor: Cesium.Color.fromCssColorString('#e4ded5')
     }), 4000, null);
     if (osm && !isPhotorealActive) {
-      osm.maximumScreenSpaceError = 8;
+      osm.maximumScreenSpaceError = Math.max(4, qualityBase.sse * 0.6);
       scene.primitives.add(osm);
       osmTileset = osm;
       sceneStatus.buildings = true;
     }
   } catch (e) {
     console.warn('OSM buildings load failed:', e);
+  }
+}
+
+var photoPrewarm = null;
+var photoPrewarmToken = null;
+var schedulerTuned = false;
+
+function tuneRequestScheduler() {
+  if (schedulerTuned || !window.Cesium || !Cesium.RequestScheduler) return;
+  // Per-server stays at Cesium's default of 18; the global ceiling of 50 is
+  // what actually throttles a photorealistic tileset at street level.
+  Cesium.RequestScheduler.maximumRequests = 128;
+  schedulerTuned = true;
+}
+
+function requestPhotoreal() {
+  tuneRequestScheduler();
+  return Cesium.createGooglePhotorealistic3DTileset(undefined, {
+    cacheBytes: qualityBase.cacheMB * 1024 * 1024,
+    maximumCacheOverflowBytes: Math.round(qualityBase.cacheMB * 0.5) * 1024 * 1024
+  }).catch(function(e) {
+    console.warn('Photorealistic tiles unavailable:', e);
+    return null;
+  });
+}
+
+/* The tileset handshake (ion asset lookup, then Google's root manifest) is
+   pure latency and does not need the viewer, so start it while the launcher
+   is still on screen instead of after the user hits Launch. */
+function prewarmPhotoreal() {
+  if (photoPrewarm || !window.Cesium) return;
+  try {
+    var tok = (($('tokenField') && $('tokenField').value) || '').trim() || getIonToken();
+    Cesium.Ion.defaultAccessToken = tok;
+    photoPrewarmToken = tok;
+    photoPrewarm = requestPhotoreal();
+  } catch (e) {
+    photoPrewarm = null;
   }
 }
 
@@ -1543,7 +1757,9 @@ async function startEngine() {
   }
 
   try {
-    Cesium.Ion.defaultAccessToken = ($('tokenField').value || '').trim() || getIonToken();
+    var effToken = ($('tokenField').value || '').trim() || getIonToken();
+    Cesium.Ion.defaultAccessToken = effToken;
+    tuneRequestScheduler();
 
     updateBoot(30, 'Creating 3D viewport…');
     viewer = new Cesium.Viewer('cesium', {
@@ -1560,10 +1776,12 @@ async function startEngine() {
       selectionIndicator: false,
       skyBox: false,
       skyAtmosphere: new Cesium.SkyAtmosphere(),
+      msaaSamples: 1,
       contextOptions: { webgl: { powerPreference: 'high-performance' } }
     });
 
     scene = viewer.scene;
+    applyQuality();
     scene.globe.depthTestAgainstTerrain = true;
     scene.globe.enableLighting = false;
     scene.globe.baseColor = Cesium.Color.fromCssColorString('#1c262b');
@@ -1582,13 +1800,16 @@ async function startEngine() {
     // and upgrade the scene when they arrive instead of dropping them.
     updateBoot(45, 'Connecting to photorealistic 3D…');
     var photoPromise = null;
-    try {
-      photoPromise = Cesium.createGooglePhotorealistic3DTileset().catch(function(e) {
-        console.warn('Photorealistic tiles unavailable:', e);
-        return null;
-      });
-    } catch (e) {
-      photoPromise = Promise.resolve(null);
+    if (photoPrewarm && photoPrewarmToken === effToken) {
+      // Already in flight since the launcher opened — the root manifest and
+      // the first tile requests have had a head start.
+      photoPromise = photoPrewarm;
+    } else {
+      try {
+        photoPromise = requestPhotoreal();
+      } catch (e) {
+        photoPromise = Promise.resolve(null);
+      }
     }
 
     var quickPhoto = await withTimeout(photoPromise, 3500, null);
@@ -1626,6 +1847,7 @@ async function startEngine() {
     // geometry once it exists rather than trusting the first probe.
     settleSpawn();
 
+    qWarmupUntil = performance.now() + 10000;
     requestAnimationFrame(gameLoop);
 
   } catch (criticalErr) {
@@ -2282,6 +2504,7 @@ function initInputControls() {
   window.addEventListener('blur', function() { keyMap = Object.create(null); });
 
   $('camSwitchBtn').onclick = cycleCam;
+  $('qualityBtn').onclick = cycleQuality;
   $('pauseBtn').onclick = function() { togglePause(true); };
   $('resumeBtn').onclick = function() { togglePause(false); };
   $('exitBtn').onclick = function() { location.reload(); };
@@ -2488,6 +2711,7 @@ function gameLoop(now) {
 
     if (frameTick % 6 === 0) { scanForRail(); updateBoardPrompt(); }
     if (frameTick % 30 === 0) updateTileDetail();
+    updateAutoQuality(now);
 
     updateSimRender();
     checkAdventure(dt);
@@ -2661,11 +2885,12 @@ function resetFov() {
 
 // Loosen tile detail at speed so streaming keeps up at Mach numbers.
 function updateTileDetail() {
-  var kmh = Math.abs(simState.speed) * 3.6;
-  var sse = kmh > 600 ? 40 : (kmh > 300 ? 26 : 16);
+  var kmh = simState ? Math.abs(simState.speed) * 3.6 : 0;
+  var mult = kmh > 600 ? 2.5 : (kmh > 300 ? 1.6 : 1);
+  var sse = qualityBase.sse * mult;
   if (photoTileset && photoTileset.maximumScreenSpaceError !== sse) photoTileset.maximumScreenSpaceError = sse;
   if (osmTileset) {
-    var osse = kmh > 300 ? 20 : 8;
+    var osse = Math.max(4, qualityBase.sse * 0.6) * mult;
     if (osmTileset.maximumScreenSpaceError !== osse) osmTileset.maximumScreenSpaceError = osse;
   }
 }
@@ -2905,6 +3130,7 @@ function handleLoginAttempt() {
 function unlockApplication() {
   var gate = $('loginGate');
   if (gate) gate.classList.add('hidden');
+  waitForCesium().then(function(ok) { if (ok) prewarmPhotoreal(); });
 }
 
 function lockApplication() {
@@ -2924,6 +3150,10 @@ function setupAuth() {
   $('loginUser').onkeydown = function(e) { if (e.key === 'Enter') $('loginPass').focus(); };
   $('loginPass').onkeydown = function(e) { if (e.key === 'Enter') handleLoginAttempt(); };
   $('logoutBtn').onclick = lockApplication;
+
+  loadQualityPref();
+  if (qualityAuto) qualityIdx = guessQualityIndex();
+  applyQuality();
 
   if (checkAuthSession()) unlockApplication();
   else setTimeout(function() { if ($('loginUser')) $('loginUser').focus(); }, 100);
