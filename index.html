@@ -420,7 +420,35 @@ if (window.Cesium) {
     white-space: nowrap;
   }
   .coord-info b { color: var(--gold); }
-  .hud-controls { display: flex; gap: 6px; }
+  .hud-controls { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+  .hud-btn:disabled { opacity: 0.45; cursor: default; }
+  .hud-btn:disabled:hover { background: rgba(10, 19, 26, 0.9); color: #fff; }
+
+  .search-wrap { position: relative; width: 100%; }
+  .search-input {
+    width: 100%; box-sizing: border-box;
+    background: rgba(8, 16, 22, 0.92);
+    border: 1px solid var(--border); border-radius: 12px;
+    color: #fff; font-size: 0.92rem; padding: 10px 12px;
+  }
+  .search-input:focus { outline: none; border-color: var(--accent); }
+  .search-list {
+    display: none; margin-top: 6px; max-height: 210px; overflow-y: auto;
+    border: 1px solid var(--border); border-radius: 12px;
+    background: rgba(8, 16, 22, 0.97);
+  }
+  .search-list.on { display: block; }
+  .search-hit {
+    display: block; width: 100%; text-align: left; background: none;
+    border: 0; border-bottom: 1px solid rgba(255,255,255,0.07);
+    color: #fff; padding: 9px 12px; cursor: pointer; font-size: 0.85rem;
+  }
+  .search-hit:last-child { border-bottom: 0; }
+  .search-hit:hover { background: rgba(255,255,255,0.09); }
+  .search-hit b { display: block; font-weight: 600; }
+  .search-hit span { display: block; opacity: 0.6; font-size: 0.75rem; margin-top: 2px; }
+  .search-empty { padding: 10px 12px; font-size: 0.8rem; opacity: 0.6; }
+  .pause-settings { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 4px 0 2px; }
   .hud-btn {
     background: rgba(10, 19, 26, 0.9);
     backdrop-filter: blur(8px);
@@ -803,6 +831,11 @@ if (window.Cesium) {
 
     <h2>1. Choose a location</h2>
     <div class="select-row">
+      <div class="search-wrap" style="margin-bottom:8px;">
+        <input class="search-input" id="menuSearch" type="search" autocomplete="off"
+               placeholder="Search anywhere on Earth — city, landmark, or lat, lon">
+        <div class="search-list" id="menuSearchList"></div>
+      </div>
       <select class="styled-select" id="launcherCitySelect" aria-label="World locations"></select>
     </div>
     <div class="grid" id="placeGrid"></div>
@@ -879,8 +912,8 @@ if (window.Cesium) {
       </div>
       <div class="hud-controls">
         <button class="hud-btn" id="camSwitchBtn" type="button">Cam: Chase</button>
-        <button class="hud-btn" id="qualityBtn" type="button">Quality: Auto</button>
-        <button class="hud-btn" id="roadBtn" type="button">Roads: Assist</button>
+        <button class="hud-btn" id="recoverBtn" type="button">Recover</button>
+        <button class="hud-btn" id="footBtn" type="button" style="display:none">Get out</button>
         <button class="hud-btn" id="pauseBtn" type="button">Pause</button>
       </div>
       <div class="hud-plate" id="speedPlate">
@@ -923,6 +956,19 @@ if (window.Cesium) {
   <div id="pauseMenu">
     <h2>Paused</h2>
     <p id="pauseNote">3D satellite terrain and imagery active.</p>
+
+    <div class="search-wrap">
+      <input class="search-input" id="gameSearch" type="search" autocomplete="off"
+             placeholder="Go anywhere — city, landmark, or lat, lon">
+      <div class="search-list" id="gameSearchList"></div>
+    </div>
+
+    <div class="pause-settings">
+      <button class="hud-btn" id="qualityBtn" type="button">Quality: Auto</button>
+      <button class="hud-btn" id="roadBtn" type="button">Roads: Assist</button>
+      <button class="hud-btn" id="shareBtn" type="button">Copy share link</button>
+    </div>
+
     <div style="font-family:monospace;font-size:0.8rem;opacity:0.75;text-align:center;line-height:1.8;" id="controlGuide"></div>
     <div style="display:flex;gap:10px;margin-top:10px;">
       <button class="btn-go" id="resumeBtn" type="button">Resume</button>
@@ -1137,6 +1183,8 @@ var CITY_GROUP_ORDER = ['New York', 'United States', 'Americas', 'Europe', 'Afri
    Vehicles
    ──────────────────────────────────────────────────────────── */
 var VEHICLES = {
+  walk:   { label: 'On Foot', note: 'walk the streets', kind: 'foot', topSpeed: 5.4,
+            walkSpeed: 1.7, accel: 9, brake: 20, steer: 2.4, ride: 0.92, color: '#cbd5e1' },
   sedan:  { label: 'Sedan', note: 'fast highway cruiser', kind: 'drive', topSpeed: 65, accel: 24, brake: 38, steer: 1.8, ride: 0.42, color: '#2c3e50' },
   taxi:   { label: 'NYC Taxi', note: 'rapid city cab', kind: 'drive', topSpeed: 62, accel: 23, brake: 36, steer: 1.9, ride: 0.42, color: '#f39c12' },
   sport:  { label: 'Sport Coupe', note: 'hypercar acceleration', kind: 'drive', topSpeed: 110, accel: 44, brake: 58, steer: 2.2, ride: 0.36, color: '#e74c3c' },
@@ -1297,6 +1345,7 @@ function updateCoordDisplay() {
   $('placeLine').textContent = sel.place.name + (sel.place.region ? ' — ' + sel.place.region : '');
   var v = VEHICLES[sel.vehicle];
   if (v.kind === 'fly') $('launchHint').textContent = 'Spawns airborne at 340m.';
+  else if (v.kind === 'foot') $('launchHint').textContent = 'Spawns on the pavement. Shift to run.';
   else if (v.kind === 'train') $('launchHint').textContent = 'Spawns on the nearest NYC track.';
   else $('launchHint').textContent = 'Spawns on the street. Drive near a rail line to board it.';
 }
@@ -1322,7 +1371,8 @@ function initMenu() {
 
   var vehicleOptions = Object.keys(VEHICLES).map(function(id) {
     var v = VEHICLES[id];
-    var icon = v.kind === 'fly' ? '✈️ ' : (v.kind === 'train' ? '🚇 ' : '🚗 ');
+    var icon = v.kind === 'fly' ? '✈️ ' : (v.kind === 'train' ? '🚇 '
+             : (v.kind === 'foot' ? '🚶 ' : '🚗 '));
     return '<option value="' + id + '">' + icon + v.label + ' (' + v.note + ')</option>';
   }).join('');
 
@@ -1397,7 +1447,18 @@ function initMenu() {
     }
   };
 
+  wireSearch('menuSearch', 'menuSearchList', function(r) {
+    sel.place = { name: r.name, region: r.region || 'searched', group: 'New York',
+                  lat: r.lat, lon: r.lon, heading: 0 };
+    $('launcherCitySelect').value = '';
+    Array.prototype.forEach.call($('placeGrid').children, function(c) { c.classList.remove('on'); });
+    updateCoordDisplay();
+    showToast('Set to ' + r.name);
+  });
+
   $('tokenField').value = getIonToken();
+  applyDeepLink();
+  if (sel.vehicle) selectVehicle(sel.vehicle);
   updateCoordDisplay();
 }
 
@@ -1842,6 +1903,8 @@ async function startEngine() {
     initInputControls();
 
     $('inGameVehicleSelect').value = sel.vehicle;
+    updateCamButton();
+    updateFootButton();
     var matchedIdx = -1;
     for (var ci = 0; ci < CITIES.length; ci++) {
       if (Math.abs(CITIES[ci].lat - sel.place.lat) < 0.001 && Math.abs(CITIES[ci].lon - sel.place.lon) < 0.001) {
@@ -1925,8 +1988,11 @@ function settleSpawn() {
     if (h === undefined && scene.globe && scene.globe.show) h = scene.globe.getHeight(carto);
     if (h !== undefined && isFinite(h)) {
       simState.ground = h;
-      if (simState.spec.kind === 'drive') simState.height = h + simState.spec.ride;
-      else if (simState.spec.kind === 'train') simState.height = h + currentTrackHeight();
+      if (simState.spec.kind === 'drive' || simState.spec.kind === 'foot') {
+        simState.height = h + simState.spec.ride;
+      } else if (simState.spec.kind === 'train') {
+        simState.height = h + currentTrackHeight();
+      }
     }
     if (attempts >= 8) clearInterval(timer);
   }, 350);
@@ -2737,6 +2803,7 @@ function initVehicleRig(groundH) {
 }
 
 function chassisFor(vehId, spec) {
+  if (spec.kind === 'foot') return new Cesium.Cartesian3(0.5, 0.4, 1.75);
   if (spec.kind === 'train') return new Cesium.Cartesian3(3.2, 19.5, 3.4);
   if (spec.kind === 'fly') {
     return vehId === 'jet'
@@ -2795,6 +2862,9 @@ function changeVehicleInGame(newVehId) {
   sel.vehicle = newVehId;
   simState.spec = newSpec;
   if (newSpec.kind === 'drive') lastRoadVehicle = newVehId;
+  // Choosing a vehicle from the menu is not walking back to the one you
+  // parked, so that car is gone rather than left as a phantom waypoint.
+  parked = null;
 
   if (newSpec.kind === 'train') {
     if (!snapToNearestSubwayTrack(4000)) {
@@ -2953,30 +3023,519 @@ async function ensureVehicleModel(vehId) {
 // The box is the stand-in: it shows until a model arrives, and stays for
 // every vehicle that has no model of its own.
 function applyVehicleVisibility() {
+  // On foot there is no avatar, so nothing represents the player — but the
+  // car you stepped out of keeps its model and stays visible from anywhere.
+  if (onFoot()) {
+    if (vehicleEntity) vehicleEntity.show = false;
+    if (vehicleModel) vehicleModel.show = !!(parked && vehicleModelFor === parked.vehId);
+    return;
+  }
   var usingModel = !!(vehicleModel && vehicleModelFor === sel.vehicle);
-  var inCockpit = (curCamIdx === 1);
+  var inCockpit = (activeCam().id === 'cockpit');
   if (vehicleEntity) vehicleEntity.show = !usingModel && !inCockpit;
   if (vehicleModel) vehicleModel.show = usingModel && !inCockpit;
 }
 
 function updateVehicleModelPose(pos) {
-  if (!vehicleModel || vehicleModelFor !== sel.vehicle) return;
-  var cfg = modelConfigFor(sel.vehicle);
+  if (!vehicleModel) return;
+
+  // While the player is on foot the model belongs to the car they left, not
+  // to them, so it holds the parking spot instead of following the camera.
+  var lonR, latR, groundH, hdg, pitch, roll, vehId;
+  if (onFoot()) {
+    if (!parked) return;
+    vehId = parked.vehId;
+    lonR = Cesium.Math.toRadians(parked.lon);
+    latR = Cesium.Math.toRadians(parked.lat);
+    groundH = parked.ground;
+    hdg = parked.heading; pitch = 0; roll = 0;
+  } else {
+    vehId = sel.vehicle;
+    lonR = simState.lon; latR = simState.lat; groundH = simState.ground;
+    hdg = simState.heading; pitch = simState.pitch; roll = simState.roll;
+  }
+  if (vehicleModelFor !== vehId) return;
+
+  var cfg = modelConfigFor(vehId);
   var scale = vehicleModel.scale || 1;
   // Drop the origin so the tyres meet the road rather than hovering at the
   // physics ride height.
   var groundPos = Cesium.Cartesian3.fromRadians(
-    simState.lon, simState.lat, simState.ground + (cfg ? cfg.sink : 0) * scale);
-  var hpr = new Cesium.HeadingPitchRoll(
-    simState.heading - Math.PI / 2, simState.pitch, simState.roll);
+    lonR, latR, groundH + (cfg ? cfg.sink : 0) * scale);
+  var hpr = new Cesium.HeadingPitchRoll(hdg - Math.PI / 2, pitch, roll);
   vehicleModel.modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(groundPos, hpr);
 }
 
-async function warpToCity(cityIdx) {
-  var p = CITIES[cityIdx];
+/* ────────────────────────────────────────────────────────────
+   Deep links
+
+   The address bar is the share format. It tracks where you are as you play,
+   so at any moment the URL in the bar is a link that drops someone else in
+   the same spot in the same vehicle — which is the whole point of handing
+   the thing to a friend.
+
+   State lives in the hash so it never reaches the server, and it is written
+   with replaceState so the back button still leaves the app.
+   ──────────────────────────────────────────────────────────── */
+var deepLinkAutoStart = false;
+
+function parseDeepLink() {
+  var raw = (location.hash || '').replace(/^#\/?/, '');
+  if (!raw) return null;
+  var q;
+  try { q = new URLSearchParams(raw); } catch (e) { return null; }
+
+  var at = q.get('at');
+  var out = {};
+  if (at) {
+    var parts = at.split(',');
+    var lat = parseFloat(parts[0]), lon = parseFloat(parts[1]);
+    if (isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+      out.place = {
+        name: q.get('n') ? decodeURIComponent(q.get('n')) : 'Shared spot',
+        region: 'from a link',
+        group: 'New York',
+        lat: lat, lon: lon,
+        heading: parseFloat(q.get('hdg')) || 0
+      };
+    }
+  }
+  var v = q.get('v');
+  if (v && VEHICLES[v]) out.vehicle = v;
+  out.go = q.get('go') === '1';
+  return (out.place || out.vehicle) ? out : null;
+}
+
+function applyDeepLink() {
+  var d = parseDeepLink();
+  if (!d) return false;
+  if (d.place) {
+    sel.place = d.place;
+    // A linked spot is not in CITIES, so drop the dropdown's selection
+    // rather than leaving it pointing at an unrelated city.
+    var sels = $('launcherCitySelect');
+    if (sels) sels.value = '';
+  }
+  if (d.vehicle) sel.vehicle = d.vehicle;
+  deepLinkAutoStart = !!d.go;
+  return true;
+}
+
+function currentLinkParams() {
+  var lat, lon, hdg;
+  if (simState) {
+    lat = Cesium.Math.toDegrees(simState.lat);
+    lon = Cesium.Math.toDegrees(simState.lon);
+    hdg = Cesium.Math.toDegrees(simState.heading);
+  } else {
+    lat = sel.place.lat; lon = sel.place.lon; hdg = sel.place.heading || 0;
+  }
+  var p = 'at=' + lat.toFixed(5) + ',' + lon.toFixed(5) +
+          '&v=' + sel.vehicle +
+          '&hdg=' + Math.round(((hdg % 360) + 360) % 360);
+  if (sel.place && sel.place.name) p += '&n=' + encodeURIComponent(sel.place.name);
+  return p;
+}
+
+function shareUrl() {
+  return location.origin + location.pathname + '#' + currentLinkParams() + '&go=1';
+}
+
+var lastUrlSync = 0;
+var lastUrlLat = null, lastUrlLon = null;
+
+/* Rewriting the hash is cheap but not free, and every write is a history
+   entry candidate, so only do it when the player has actually gone
+   somewhere. */
+function syncDeepLink(now) {
+  if (!simState) return;
+  if (now - lastUrlSync < 1500) return;
+  var lat = Cesium.Math.toDegrees(simState.lat);
+  var lon = Cesium.Math.toDegrees(simState.lon);
+  if (lastUrlLat !== null && metersDeg(lat, lon, lastUrlLat, lastUrlLon) < 8) return;
+  lastUrlSync = now;
+  lastUrlLat = lat; lastUrlLon = lon;
+  try { history.replaceState(null, '', '#' + currentLinkParams()); } catch (e) {}
+}
+
+function copyShareLink() {
+  var url = shareUrl();
+  var done = function() { showToast('Link copied — it drops them right here'); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done, function() { promptShare(url); });
+  } else {
+    promptShare(url);
+  }
+}
+
+function promptShare(url) {
+  // Clipboard access needs a secure context and a user gesture; when it is
+  // refused, showing the text is better than silently failing.
+  window.prompt('Copy this link:', url);
+}
+
+/* ────────────────────────────────────────────────────────────
+   Search anywhere
+
+   The city dropdown is a shortlist, not the limit — the tiles cover the
+   planet. Cesium ion's geocoder comes with the token the app already uses;
+   Nominatim is the backstop when ion is rate limited or the token is dead.
+   ──────────────────────────────────────────────────────────── */
+var searchBusy = false;
+var searchSeq = 0;
+
+async function geocodeSearch(query) {
+  query = (query || '').trim();
+  if (query.length < 2) return [];
+
+  // "40.5755, -73.9805" is a location too, and the most precise one someone
+  // can paste in.
+  var ll = query.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if (ll) {
+    var la = parseFloat(ll[1]), lo = parseFloat(ll[2]);
+    if (Math.abs(la) <= 90 && Math.abs(lo) <= 180) {
+      return [{ name: la.toFixed(4) + ', ' + lo.toFixed(4), region: 'coordinates', lat: la, lon: lo }];
+    }
+  }
+
+  var out = await geocodeIon(query);
+  if (!out.length) out = await geocodeNominatim(query);
+  return out;
+}
+
+async function geocodeIon(query) {
+  try {
+    var url = 'https://api.cesium.com/v1/geocode/search?access_token=' +
+              encodeURIComponent(getIonToken()) + '&text=' + encodeURIComponent(query);
+    var res = await withTimeout(fetch(url), 8000, null);
+    if (!res || !res.ok) return [];
+    var json = await res.json();
+    if (!json || !json.features) return [];
+    return json.features.slice(0, 6).map(function(f) {
+      var c = f.geometry && f.geometry.coordinates;
+      if (!c) return null;
+      var label = (f.properties && f.properties.label) || 'Result';
+      var comma = label.indexOf(',');
+      return {
+        name: comma > 0 ? label.slice(0, comma) : label,
+        region: comma > 0 ? label.slice(comma + 2) : '',
+        lat: c[1], lon: c[0]
+      };
+    }).filter(Boolean);
+  } catch (e) {
+    return [];
+  }
+}
+
+async function geocodeNominatim(query) {
+  try {
+    var url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=' +
+              encodeURIComponent(query);
+    var res = await withTimeout(fetch(url, { headers: { 'Accept': 'application/json' } }), 8000, null);
+    if (!res || !res.ok) return [];
+    var rows = await res.json();
+    if (!Array.isArray(rows)) return [];
+    return rows.map(function(r) {
+      var label = r.display_name || 'Result';
+      var comma = label.indexOf(',');
+      return {
+        name: r.name || (comma > 0 ? label.slice(0, comma) : label),
+        region: comma > 0 ? label.slice(comma + 2) : '',
+        lat: parseFloat(r.lat), lon: parseFloat(r.lon)
+      };
+    }).filter(function(r) { return isFinite(r.lat) && isFinite(r.lon); });
+  } catch (e) {
+    return [];
+  }
+}
+
+function renderSearchResults(listEl, results, onPick) {
+  if (!listEl) return;
+  if (!results.length) {
+    listEl.innerHTML = '<div class="search-empty">Nothing found — try a city, a landmark, or "lat, lon".</div>';
+    listEl.classList.add('on');
+    return;
+  }
+  listEl.innerHTML = results.map(function(r, i) {
+    return '<button class="search-hit" type="button" data-i="' + i + '">' +
+           '<b>' + escapeHtml(r.name) + '</b>' +
+           (r.region ? '<span>' + escapeHtml(r.region) + '</span>' : '') + '</button>';
+  }).join('');
+  listEl.classList.add('on');
+  Array.prototype.forEach.call(listEl.querySelectorAll('.search-hit'), function(b) {
+    b.onclick = function() { onPick(results[+b.dataset.i]); };
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function wireSearch(inputId, listId, onPick) {
+  var input = $(inputId), list = $(listId);
+  if (!input || !list) return;
+  var run = async function() {
+    var q = input.value;
+    if (q.trim().length < 2) { list.classList.remove('on'); return; }
+    var seq = ++searchSeq;
+    list.innerHTML = '<div class="search-empty">Searching…</div>';
+    list.classList.add('on');
+    var results = await geocodeSearch(q);
+    if (seq !== searchSeq) return;   // a newer query overtook this one
+    renderSearchResults(list, results, function(r) {
+      list.classList.remove('on');
+      input.value = '';
+      onPick(r);
+    });
+  };
+  var timer = null;
+  input.oninput = function() { clearTimeout(timer); timer = setTimeout(run, 350); };
+  input.onkeydown = function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); run(); }
+    e.stopPropagation();   // typing "w" should not drive the car
+  };
+  input.onkeyup = function(e) { e.stopPropagation(); };
+}
+
+/* ────────────────────────────────────────────────────────────
+   Recover
+
+   The climb guard stops the car against a wall, which is right, but it also
+   means you can wedge yourself in a corner with no way out. Recover is the
+   escape hatch: back onto the nearest street, back onto the rails, or back
+   into level flight, depending on what you are driving.
+   ──────────────────────────────────────────────────────────── */
+function recoverVehicle() {
+  if (!simState || transition) return;
+  var kind = simState.spec.kind;
+
+  simState.speed = 0;
+  simState.vertical = 0;
+  simState.pitch = 0;
+  simState.roll = 0;
+  simState.blocked = false;
+  wallProbe.blocked = false;
+  wallProbe.tick = -1;
+
+  if (kind === 'train') {
+    if (snapToNearestSubwayTrack(4000)) showToast('Back on the rails');
+    else showToast('No track nearby to recover onto');
+    settleSpawn();
+    return;
+  }
+
+  if (kind === 'fly') {
+    simState.height = Math.max(simState.height, simState.ground + 300);
+    simState.speed = Math.max(45, simState.spec.topSpeed * 0.35);
+    simState.throttle = 0.75;
+    simState.burnMix = 0;
+    resetFov();
+    showToast('Levelled off');
+    return;
+  }
+
+  // Ground vehicles and pedestrians: the nearest real street is the safest
+  // place to be put down, because we know it is not the inside of a building.
+  var latDeg = Cesium.Math.toDegrees(simState.lat);
+  var lonDeg = Cesium.Math.toDegrees(simState.lon);
+  var hit = osmNet.ready ? osmNearestRoad(latDeg, lonDeg, 200) : null;
+
+  if (hit) {
+    simState.lat = Cesium.Math.toRadians(hit.lat);
+    simState.lon = Cesium.Math.toRadians(hit.lon);
+    var fwd = hit.heading;
+    if (Math.abs(angleDiff(simState.heading, fwd)) > Math.PI / 2) fwd += Math.PI;
+    simState.heading = fwd;
+    showToast('Back on the road');
+  } else {
+    // No street data: reverse out along the way we came in.
+    var back = 12;
+    simState.lat -= (back * Math.cos(simState.heading)) / EARTH_R;
+    simState.lon -= (back * Math.sin(simState.heading)) /
+                    (EARTH_R * Math.max(0.05, Math.cos(simState.lat)));
+    simState.heading += Math.PI;
+    showToast('Backed out');
+  }
+
+  var surf = sampleSurfaceAt(Cesium.Math.toDegrees(simState.lat), Cesium.Math.toDegrees(simState.lon));
+  if (surf !== null) { simState.ground = surf; simState.groundTarget = surf; }
+  simState.height = simState.ground + simState.spec.ride;
+  settleSpawn();
+}
+
+/* ────────────────────────────────────────────────────────────
+   On foot
+
+   Getting out turns the sim from a vehicle into a place. The car stays
+   parked exactly where you left it — and because the glTF model stays with
+   it rather than with you, walking away and turning round to look at your
+   own car is the thing this mode is actually for.
+   ──────────────────────────────────────────────────────────── */
+var FOOT_CAM_VIEWS = [
+  { id: 'eyes',  label: 'First Person', dist: 0.02, up: 0.82, pitch: -0.03 },
+  { id: 'drone', label: 'Drone',        dist: 7.5,  up: 3.4,  pitch: -0.26 }
+];
+
+var parked = null;   // { vehId, lat, lon, heading, ground } while on foot
+
+function onFoot() { return !!simState && simState.spec.kind === 'foot'; }
+
+function camViews() { return onFoot() ? FOOT_CAM_VIEWS : CAM_VIEWS; }
+
+function activeCam() {
+  var views = camViews();
+  return views[Math.min(curCamIdx, views.length - 1)];
+}
+
+function stepWalk(input, dt) {
+  var v = simState.spec;
+  // A person is not a car: near-instant start and stop, no drift, and the
+  // "drift" control becomes run.
+  var running = input.drift;
+  var top = running ? v.topSpeed : v.walkSpeed;
+  var want = input.throttle > 0 ? top : (input.throttle < 0 ? -v.walkSpeed * 0.55 : 0);
+  simState.speed += (want - simState.speed) * Math.min(1, v.accel * dt);
+  if (Math.abs(simState.speed) < 0.05) simState.speed = 0;
+
+  simState.heading += input.steer * v.steer * dt;
+  simState.heading = ((simState.heading % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+  simState.blocked = drivePathBlocked(simState, dt);
+  if (simState.blocked) {
+    simState.speed = 0;
+  } else {
+    var d = simState.speed * dt;
+    simState.lat += (d * Math.cos(simState.heading)) / EARTH_R;
+    simState.lon += (d * Math.sin(simState.heading)) /
+                    (EARTH_R * Math.max(0.05, Math.cos(simState.lat)));
+  }
+
+  sampleLiveGround(simState, dt);
+  simState.height = simState.ground + v.ride;
+  simState.roll = 0;
+  simState.pitch = 0;
+  // A slight bob sells walking without needing an animated avatar.
+  if (Math.abs(simState.speed) > 0.4) {
+    simState.height += Math.sin(frameTick * 0.28) * (running ? 0.055 : 0.03);
+  }
+  updateTunnelVeil(1);
+}
+
+function metersToParked() {
+  if (!parked || !simState) return Infinity;
+  return metersDeg(Cesium.Math.toDegrees(simState.lat), Cesium.Math.toDegrees(simState.lon),
+                   parked.lat, parked.lon);
+}
+
+var FOOT_REACH = 9;
+
+function canExitVehicle() {
+  return !!simState && simState.spec.kind === 'drive' && Math.abs(simState.speed) < 2.5 && !transition;
+}
+
+function canEnterVehicle() {
+  return onFoot() && !!parked && metersToParked() <= FOOT_REACH && !transition;
+}
+
+function updateFootButton() {
+  var b = $('footBtn');
+  if (!b) return;
+  if (canExitVehicle()) { b.style.display = ''; b.textContent = 'Get out'; b.disabled = false; }
+  else if (onFoot() && parked) {
+    b.style.display = '';
+    var d = metersToParked();
+    if (d <= FOOT_REACH) { b.textContent = 'Get in'; b.disabled = false; }
+    else { b.textContent = Math.round(d) + ' m to car'; b.disabled = true; }
+  } else if (onFoot()) {
+    b.style.display = '';
+    b.textContent = 'No car';
+    b.disabled = true;
+  } else {
+    b.style.display = 'none';
+  }
+}
+
+function exitVehicle() {
+  if (!canExitVehicle()) return;
+  parked = {
+    vehId: sel.vehicle,
+    lat: Cesium.Math.toDegrees(simState.lat),
+    lon: Cesium.Math.toDegrees(simState.lon),
+    heading: simState.heading,
+    ground: simState.ground
+  };
+
+  // Step out to the side rather than materialising inside the bodywork.
+  var side = simState.heading + Math.PI / 2;
+  var off = 2.2;
+  simState.lat += (off * Math.cos(side)) / EARTH_R;
+  simState.lon += (off * Math.sin(side)) / (EARTH_R * Math.max(0.05, Math.cos(simState.lat)));
+
+  sel.vehicle = 'walk';
+  simState.spec = VEHICLES.walk;
+  simState.speed = 0;
+  simState.height = simState.ground + VEHICLES.walk.ride;
+  curCamIdx = 0;
+
+  $('inGameVehicleSelect').value = 'walk';
+  createVehicleEntity();
+  ensureTrailers();
+  setupTouchPads();
+  updateCamButton();
+  showToast('On foot — walk back and press Get in to drive off');
+}
+
+function enterVehicle() {
+  if (!canEnterVehicle()) return;
+  var p = parked;
+  sel.vehicle = p.vehId;
+  simState.spec = VEHICLES[p.vehId];
+  simState.lat = Cesium.Math.toRadians(p.lat);
+  simState.lon = Cesium.Math.toRadians(p.lon);
+  simState.heading = p.heading;
+  simState.speed = 0;
+  simState.ground = p.ground;
+  simState.groundTarget = p.ground;
+  simState.height = p.ground + simState.spec.ride;
+  parked = null;
+  curCamIdx = 0;
+
+  $('inGameVehicleSelect').value = sel.vehicle;
+  createVehicleEntity();
+  ensureVehicleModel(sel.vehicle);
+  ensureTrailers();
+  setupTouchPads();
+  updateCamButton();
+  showToast('Back behind the wheel');
+}
+
+function toggleFoot() {
+  if (canExitVehicle()) exitVehicle();
+  else if (canEnterVehicle()) enterVehicle();
+  else if (onFoot()) showToast('Too far from the car');
+  else showToast('Stop the car first');
+}
+
+function updateCamButton() {
+  $('camSwitchBtn').textContent = 'Cam: ' + activeCam().label;
+}
+
+function warpToCity(cityIdx) {
+  return warpToPlace(CITIES[cityIdx]);
+}
+
+/* Anywhere the geocoder can name, not just the shortlist in CITIES. */
+async function warpToPlace(p) {
   if (!p || !simState || transition) return;
   sel.place = p;
   showToast('Warping to ' + p.name + '…');
+  // Street data for the old city is meaningless here; force a refetch.
+  osmNet.centerLat = null;
+  osmNet.disabled = false;
+  osmNet.failures = 0;
+  osmFetchAround(p.lat, p.lon);
 
   var groundH = await probeTerrainHeight(p.lat, p.lon);
   simState.lat = Cesium.Math.toRadians(p.lat);
@@ -2988,7 +3547,11 @@ async function warpToCity(cityIdx) {
   simState.roll = 0;
   simState.vertical = 0;
 
-  if (simState.spec.kind === 'train') {
+  if (simState.spec.kind === 'foot') {
+    parked = null;
+    simState.height = groundH + simState.spec.ride;
+    simState.speed = 0;
+  } else if (simState.spec.kind === 'train') {
     if (!snapToNearestSubwayTrack(4000)) {
       showToast('No mapped track in ' + p.name + ' — switched to a sedan');
       sel.vehicle = lastRoadVehicle;
@@ -3274,6 +3837,8 @@ function initInputControls() {
     if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
     if (e.code === 'KeyE') triggerBoardAction();
     if (e.code === 'KeyT') cycleRailLine();
+    if (e.code === 'KeyB') recoverVehicle();
+    if (e.code === 'KeyG') toggleFoot();
   });
   window.addEventListener('keyup', function(e) { keyMap[e.code] = false; });
   window.addEventListener('blur', function() { keyMap = Object.create(null); });
@@ -3281,6 +3846,14 @@ function initInputControls() {
   $('camSwitchBtn').onclick = cycleCam;
   $('qualityBtn').onclick = cycleQuality;
   $('roadBtn').onclick = cycleRoadMode;
+  $('recoverBtn').onclick = recoverVehicle;
+  $('footBtn').onclick = toggleFoot;
+  $('shareBtn').onclick = copyShareLink;
+  wireSearch('gameSearch', 'gameSearchList', function(r) {
+    togglePause(false);
+    warpToPlace({ name: r.name, region: r.region, group: 'New York',
+                  lat: r.lat, lon: r.lon, heading: 0 });
+  });
   $('pauseBtn').onclick = function() { togglePause(true); };
   $('resumeBtn').onclick = function() { togglePause(false); };
   $('exitBtn').onclick = function() { location.reload(); };
@@ -3295,10 +3868,10 @@ function initInputControls() {
 }
 
 function cycleCam() {
-  curCamIdx = (curCamIdx + 1) % CAM_VIEWS.length;
-  $('camSwitchBtn').textContent = 'Cam: ' + CAM_VIEWS[curCamIdx].label;
+  curCamIdx = (curCamIdx + 1) % camViews().length;
+  updateCamButton();
   applyVehicleVisibility();
-  showToast('Camera: ' + CAM_VIEWS[curCamIdx].label);
+  showToast('Camera: ' + activeCam().label);
 }
 
 function cycleRailLine() {
@@ -3374,7 +3947,13 @@ function setupTouchPads() {
   var kind = simState.spec.kind;
   var pads = $('padContainer');
 
-  if (kind === 'drive') {
+  if (kind === 'foot') {
+    pads.innerHTML =
+      '<div class="pad-btn" data-act="gas">Walk ⇧</div>' +
+      '<div class="pad-btn" data-act="drift">Run</div>' +
+      '<div class="pad-btn" data-act="rev">Back ⇩</div>' +
+      '<div class="pad-btn wide" data-act="foot">Get in / out</div>';
+  } else if (kind === 'drive') {
     pads.innerHTML =
       '<div class="pad-btn" data-act="gas">Gas ⇧</div>' +
       '<div class="pad-btn" data-act="brake">Brake</div>' +
@@ -3411,6 +3990,7 @@ function setupTouchPads() {
       if (act === 'thrUp') touchInput.throtUp = on;
       if (act === 'thrDown') touchInput.throtDown = on;
       if (act === 'switch' && on) cycleRailLine();
+      if (act === 'foot' && on) toggleFoot();
       if (act === 'climb') touchInput.collective = on ? 1 : 0;
       if (act === 'descend') touchInput.collective = on ? -1 : 0;
       if (act === 'rudL') touchInput.yaw = on ? -1 : 0;
@@ -3484,10 +4064,13 @@ function gameLoop(now) {
 
     if (v.kind === 'train') stepTrain(input, dt);
     else if (v.kind === 'drive') stepDrive(input, dt);
+    else if (v.kind === 'foot') stepWalk(input, dt);
     else stepFlight(input, dt);
 
-    if (frameTick % 6 === 0) { scanForRail(); updateBoardPrompt(); }
+    if (frameTick % 6 === 0 && !onFoot()) { scanForRail(); updateBoardPrompt(); }
     if (frameTick % 30 === 0) updateTileDetail();
+    if (frameTick % 15 === 0) updateFootButton();
+    syncDeepLink(now);
     if (frameTick % 45 === 0 && simState.spec.kind !== 'fly') {
       osmMaintain(Cesium.Math.toDegrees(simState.lat), Cesium.Math.toDegrees(simState.lon));
     }
@@ -3617,14 +4200,21 @@ function drivePathBlocked(state, dt) {
   wallProbe.tick = frameTick;
 
   var dir = state.speed < 0 ? -1 : 1;
-  var look = Math.max(2.0, Math.abs(state.speed) * dt * 2 + 1.5);
+  var look = state.spec.kind === 'foot'
+    ? Math.max(0.9, Math.abs(state.speed) * dt * 2 + 0.6)
+    : Math.max(2.0, Math.abs(state.speed) * dt * 2 + 1.5);
   var aheadLat = state.lat + (look * dir * Math.cos(state.heading)) / EARTH_R;
   var aheadLon = state.lon + (look * dir * Math.sin(state.heading)) /
                  (EARTH_R * Math.max(0.05, Math.cos(state.lat)));
 
   var h = sampleSurfaceAt(Cesium.Math.toDegrees(aheadLat), Cesium.Math.toDegrees(aheadLon));
   if (h === null) { wallProbe.blocked = false; return false; }
-  wallProbe.blocked = (h - state.ground) > Math.max(1.5, look * 0.55);
+  // On foot a kerb, a step or a stoop should be walkable, so the bar is
+  // lower but the slope it implies is steeper.
+  var limit = state.spec.kind === 'foot'
+    ? Math.max(0.65, look * 0.9)
+    : Math.max(1.5, look * 0.55);
+  wallProbe.blocked = (h - state.ground) > limit;
   return wallProbe.blocked;
 }
 
@@ -3818,7 +4408,7 @@ function updateSimRender() {
     }
   }
 
-  var cam = CAM_VIEWS[curCamIdx];
+  var cam = activeCam();
   var enuMat = Cesium.Transforms.eastNorthUpToFixedFrame(pos);
   var localOffset = new Cesium.Cartesian3(
     -Math.sin(simState.heading) * cam.dist,
@@ -3896,22 +4486,27 @@ function togglePause(force) {
 
   var kind = simState ? simState.spec.kind : 'drive';
   var guide;
-  if (kind === 'drive') {
+  if (kind === 'foot') {
+    guide = 'W A S D / arrows — walk and turn<br>' +
+            'Shift — run &nbsp;|&nbsp; G — get back in the car<br>' +
+            'B — recover &nbsp;|&nbsp; C — camera &nbsp;|&nbsp; P — resume';
+  } else if (kind === 'drive') {
     guide = 'W A S D / arrows — drive and steer<br>' +
             'Space — brake &nbsp;|&nbsp; Shift — drift<br>' +
             'E — board a rail line when prompted<br>' +
+            'G — get out and walk &nbsp;|&nbsp; B — recover<br>' +
             'C — camera &nbsp;|&nbsp; P — resume';
   } else if (kind === 'train') {
     guide = 'W / S / arrows — accelerate and slow<br>' +
             'Space — train brake &nbsp;|&nbsp; T — switch line<br>' +
             'E — leave the train when stopped<br>' +
-            'C — camera &nbsp;|&nbsp; P — resume';
+            'B — recover &nbsp;|&nbsp; C — camera &nbsp;|&nbsp; P — resume';
   } else {
     guide = 'W S — pitch &nbsp;|&nbsp; A D — roll &nbsp;|&nbsp; J L — rudder<br>' +
             'R / F — throttle up and down<br>' +
             'Space / Shift — climb and descend<br>' +
             (simState && simState.spec.afterburner ? 'X — hold for afterburner<br>' : '') +
-            'C — camera &nbsp;|&nbsp; P — resume';
+            'B — level off &nbsp;|&nbsp; C — camera &nbsp;|&nbsp; P — resume';
   }
   $('controlGuide').innerHTML = guide;
   var layers = [];
@@ -3985,6 +4580,10 @@ function unlockApplication() {
   var gate = $('loginGate');
   if (gate) gate.classList.add('hidden');
   waitForCesium().then(function(ok) { if (ok) prewarmPhotoreal(); });
+  if (deepLinkAutoStart && !simState) {
+    deepLinkAutoStart = false;
+    setTimeout(function() { startEngine(); }, 250);
+  }
 }
 
 function lockApplication() {

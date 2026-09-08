@@ -105,6 +105,51 @@ before** awaiting ready, or it hangs forever. It is added hidden. Any load
 failure falls back to the box chassis, which is also what every vehicle without
 a model entry keeps using.
 
+## Deep links
+
+The address bar **is** the share format. `syncDeepLink()` rewrites
+`location.hash` (throttled, `replaceState`, only after 8 m of movement) so the
+URL is always a link that drops someone else in the same spot. `parseDeepLink()`
+/ `applyDeepLink()` read it back on load; `go=1` skips the launcher and starts
+the engine straight after sign-in (wired into `unlockApplication`). The **Copy
+share link** button in the pause menu adds `go=1` for you.
+
+Params: `at=lat,lon`, `v=<vehicleId>`, `hdg=<deg>`, `n=<name>`, `go=1`.
+
+## Recover
+
+`recoverVehicle()` (HUD button, `B`) is the escape hatch from the climb guard,
+which can otherwise wedge you in a corner with no way out. It puts a car or a
+walker on the nearest OSM centreline, re-snaps a train to the rails, and levels
+an aircraft off at 300 m AGL. With no OSM data it reverses 12 m along the way
+you came in.
+
+## Search anywhere
+
+`geocodeSearch()` tries Cesium ion's geocoder first (same token as the tiles,
+via `api.cesium.com/v1/geocode/search`, no `scene` needed), falls back to
+Nominatim, and short-circuits when the query parses as `lat, lon`. Search boxes
+live in the launcher and the pause menu; both feed `warpToPlace()`, which is
+the generalised form of the old `warpToCity()` and forces an OSM refetch since
+the previous city's street data is meaningless at the new one.
+
+## On foot
+
+`walk` is a vehicle with `kind: 'foot'`, stepped by `stepWalk()` — near-instant
+acceleration, Shift to run, and a slight sine bob. `drivePathBlocked()` uses a
+lower rise limit and a shorter lookahead for it, so a pedestrian can step up a
+kerb but still cannot walk through a wall.
+
+`exitVehicle()` records `parked = {vehId, lat, lon, heading, ground}` and steps
+you out sideways. The key detail: **the glTF model stays with the parked car,
+not with the player** — `updateVehicleModelPose()` poses it from `parked` while
+on foot, and `applyVehicleVisibility()` keeps it shown. That is what makes
+walking away and looking back at your own car work, and it is why the walker
+needs no avatar (first person by default; foot has its own `FOOT_CAM_VIEWS`, so
+read the camera through `activeCam()` / `camViews()`, never `CAM_VIEWS[curCamIdx]`).
+`enterVehicle()` only works within `FOOT_REACH` (9 m); picking a vehicle from
+the dropdown clears `parked` rather than leaving a phantom waypoint.
+
 ## Conventions
 
 - Keep it a single self-contained file. Don't introduce a bundler or split it into
