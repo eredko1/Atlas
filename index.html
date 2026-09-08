@@ -830,7 +830,7 @@ if (window.Cesium) {
 
     <details>
       <summary>About the sign-in</summary>
-      <p>Credentials are checked as salted SHA-256 digests, so the password isn't readable in the page source. This keeps it off a casual reader's screen — it isn't real access control, because everything here runs in your browser and a determined person with developer tools can step around it. Anything that must actually be protected needs a server.</p>
+      <p>Any of the accounts in <code>AUTH_ACCOUNTS</code> can sign in — there's an owner login and a shared <strong>guest</strong> login for friends. Credentials are checked as salted SHA-256 digests, so no password is readable in the page source. This keeps it off a casual reader's screen — it isn't real access control, because everything here runs in your browser and a determined person with developer tools can step around it. Anything that must actually be protected needs a server.</p>
     </details>
   </div>
 </div>
@@ -997,8 +997,18 @@ function sha256Hex(message) {
 }
 
 var AUTH_SALT = 'atlas3d.v2.';
-var AUTH_USER_HASH = 'a9d44ae0669759d42c47b4e441f998bf92c707acab881582cb6aec2b78afd20c';
-var AUTH_PASS_HASH = '01f73ebacd4f2a178b34622a9845dfa5538ac4fd37bc1544c41303c2d8b423bd';
+// One entry per account. Each holds the salted SHA-256 of 'u:<username>' and 'p:<password>'.
+var AUTH_ACCOUNTS = [
+  {
+    user: 'a9d44ae0669759d42c47b4e441f998bf92c707acab881582cb6aec2b78afd20c',
+    pass: '01f73ebacd4f2a178b34622a9845dfa5538ac4fd37bc1544c41303c2d8b423bd'
+  },
+  {
+    // guest account for sharing Atlas with friends
+    user: 'ffd5e6ce1a58cfc6bfa50a30710e460a4126d0cd9eb179065780a9bb1afbbdad',
+    pass: '6548721b6faee92882b6addd56d81755f94a1da7bfcc0327b2ba8e0dbcf1c0e9'
+  }
+];
 
 function constantTimeEqual(a, b) {
   if (a.length !== b.length) return false;
@@ -2857,10 +2867,18 @@ function handleLoginAttempt() {
   var p = $('loginPass').value;
   var err = $('loginErr');
 
-  var userOk = constantTimeEqual(sha256Hex(AUTH_SALT + 'u:' + u), AUTH_USER_HASH);
-  var passOk = constantTimeEqual(sha256Hex(AUTH_SALT + 'p:' + p), AUTH_PASS_HASH);
+  var userHash = sha256Hex(AUTH_SALT + 'u:' + u);
+  var passHash = sha256Hex(AUTH_SALT + 'p:' + p);
 
-  if (userOk && passOk) {
+  // Check every account, without short-circuiting, so the timing stays flat.
+  var matched = false;
+  for (var i = 0; i < AUTH_ACCOUNTS.length; i++) {
+    var userOk = constantTimeEqual(userHash, AUTH_ACCOUNTS[i].user);
+    var passOk = constantTimeEqual(passHash, AUTH_ACCOUNTS[i].pass);
+    matched = matched | (userOk & passOk);
+  }
+
+  if (matched) {
     err.style.display = 'none';
     loginAttempts = 0;
     setAuthSession(true);
