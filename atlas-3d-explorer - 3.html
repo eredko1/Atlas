@@ -1,0 +1,2925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Atlas 3D World Explorer</title>
+
+<link id="cesiumCss" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cesium/1.119.0/Widgets/widgets.css">
+<script>
+window.CESIUM_BASE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/cesium/1.119.0/';
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cesium/1.119.0/Cesium.js" onerror="loadFallbackCesium()"></script>
+<script>
+function loadFallbackCesium() {
+  console.warn('cdnjs blocked or slow; loading Cesium from jsDelivr mirror...');
+  window.CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/';
+  var link = document.getElementById('cesiumCss');
+  if (link) link.href = 'https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/Widgets/widgets.css';
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/Cesium.js';
+  s.onload = function() {
+    window.__cesiumReady = true;
+    window.dispatchEvent(new Event('cesium-ready'));
+  };
+  document.head.appendChild(s);
+}
+if (window.Cesium) {
+  window.__cesiumReady = true;
+}
+</script>
+
+<style>
+  :root {
+    --ink: #0a131a;
+    --deep: #132431;
+    --paper: #eef2f5;
+    --accent: #e53982;
+    --gold: #f5a623;
+    --sky: #3b9bd6;
+    --green: #2ecc71;
+    --burn: #ff7a2f;
+    --border: rgba(238, 242, 245, 0.16);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  body.running {
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    position: fixed;
+    inset: 0;
+  }
+
+  /* Launcher Dashboard */
+  #launcher {
+    min-height: 100vh;
+    padding-bottom: 80px;
+    background-image:
+      linear-gradient(rgba(59, 155, 214, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59, 155, 214, 0.08) 1px, transparent 1px);
+    background-size: 40px 40px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .container {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: max(env(safe-area-inset-top), 1.8rem) 1.2rem 4rem;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.2rem;
+    margin-bottom: 1.5rem;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 1.55rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .badge {
+    font-size: 0.72rem;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(46, 204, 113, 0.15);
+    border: 1px solid var(--green);
+    color: var(--green);
+    font-family: monospace;
+    font-weight: 600;
+  }
+  header p {
+    margin: 0.4rem 0 0;
+    font-size: 0.9rem;
+    opacity: 0.75;
+    max-width: 65ch;
+  }
+
+  .readout {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: clamp(1.6rem, 5.5vw, 2.4rem);
+    font-weight: 700;
+    color: var(--gold);
+    margin: 0.3rem 0 0.1rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .readout span { color: var(--paper); opacity: 0.35; }
+  #placeLine {
+    font-size: 0.95rem;
+    opacity: 0.8;
+    min-height: 1.5em;
+    margin-bottom: 1.4rem;
+  }
+
+  h2 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.8;
+    margin: 1.8rem 0 0.6rem;
+  }
+  h2:first-of-type { margin-top: 0; }
+
+  .select-row {
+    margin-bottom: 12px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  select.styled-select {
+    background: rgba(19, 36, 49, 0.95);
+    border: 1px solid var(--border);
+    color: var(--paper);
+    font: inherit;
+    font-size: 0.92rem;
+    font-weight: 600;
+    padding: 10px 14px;
+    border-radius: 8px;
+    width: 100%;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+  select.styled-select:focus { border-color: var(--gold); }
+  select.styled-select option, select.styled-select optgroup {
+    background: #0a131a;
+    color: #eef2f5;
+  }
+
+  .grid {
+    display: grid;
+    gap: 9px;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  }
+  .card {
+    background: rgba(19, 36, 49, 0.65);
+    border: 1px solid var(--border);
+    padding: 11px 13px;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    border-radius: 8px;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+  }
+  .card:active { transform: scale(0.98); }
+  .card:hover { border-color: rgba(238, 242, 245, 0.45); }
+  .card.on {
+    border-color: var(--accent);
+    background: rgba(229, 57, 130, 0.18);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .card b { display: block; font-weight: 600; font-size: 0.9rem; }
+  .card em {
+    font-style: normal;
+    font-family: monospace;
+    font-size: 0.72rem;
+    opacity: 0.65;
+    display: block;
+    margin-top: 3px;
+  }
+
+  .input-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  input[type=text], input[type=password] {
+    background: rgba(10, 19, 26, 0.85);
+    border: 1px solid var(--border);
+    color: var(--paper);
+    font: inherit;
+    font-size: 0.9rem;
+    padding: 11px 14px;
+    flex: 1;
+    min-width: 170px;
+    border-radius: 6px;
+  }
+  input:focus { outline: 2px solid var(--gold); }
+
+  .action-bar {
+    margin-top: 2rem;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .btn-go {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    font: inherit;
+    font-size: 1.05rem;
+    font-weight: 700;
+    padding: 14px 34px;
+    cursor: pointer;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 16px rgba(229, 57, 130, 0.4);
+    transition: transform 0.1s ease, filter 0.15s ease;
+  }
+  .btn-go:hover { filter: brightness(1.15); transform: translateY(-1px); }
+  .btn-go:active { transform: scale(0.97); }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--paper);
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 600;
+    padding: 11px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.08); }
+  .hint { font-size: 0.85rem; opacity: 0.7; }
+
+  details {
+    margin-top: 2.2rem;
+    border-top: 1px solid var(--border);
+    padding-top: 1.2rem;
+    font-size: 0.88rem;
+  }
+  summary { cursor: pointer; font-weight: 600; opacity: 0.85; }
+  details p { opacity: 0.78; max-width: 68ch; }
+
+  /* 3D Simulation Fullscreen UI */
+  #simUI {
+    display: none;
+    width: 100vw;
+    height: 100vh;
+    position: fixed;
+    inset: 0;
+    background: #0a131a;
+  }
+  #cesium { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .cesium-viewer-toolbar,
+  .cesium-viewer-animationContainer,
+  .cesium-viewer-timelineContainer,
+  .cesium-viewer-bottom { display: none !important; }
+  .cesium-widget-credits {
+    position: fixed !important;
+    bottom: calc(env(safe-area-inset-bottom) + 3px);
+    left: 8px;
+    font-size: 9px !important;
+    opacity: 0.55;
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  #tunnelVeil {
+    position: fixed;
+    inset: 0;
+    background: #04080b;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 12;
+    transition: opacity 0.35s ease;
+  }
+  #tunnelTag {
+    position: fixed;
+    left: 50%;
+    top: 46%;
+    transform: translateX(-50%);
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.8rem;
+    letter-spacing: 0.14em;
+    color: rgba(238,242,245,0.55);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 13;
+    transition: opacity 0.35s ease;
+  }
+
+  /* Boot Overlay */
+  #boot {
+    position: fixed;
+    inset: 0;
+    background: var(--ink);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 1.2rem;
+    padding: 2rem;
+  }
+  #boot.gone { opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
+  .load-bar {
+    width: min(320px, 85vw);
+    height: 5px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .load-bar i {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0%;
+    background: var(--accent);
+    transition: width 0.25s ease;
+  }
+  #bootMsg {
+    font-family: monospace;
+    font-size: 0.85rem;
+    opacity: 0.8;
+    text-align: center;
+  }
+
+  /* Top HUD Bar */
+  #topBar {
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + 6px);
+    left: 0;
+    right: 0;
+    padding: 0 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 25;
+    pointer-events: none;
+  }
+  #topBar > * { pointer-events: auto; }
+
+  .hud-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .hud-selector-bar {
+    display: flex;
+    gap: 6px;
+    flex: 1;
+    max-width: 100%;
+  }
+
+  .hud-select {
+    background: rgba(10, 19, 26, 0.9);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    color: #fff;
+    font-size: 0.76rem;
+    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 14px;
+    cursor: pointer;
+    outline: none;
+    flex: 1;
+    min-width: 120px;
+    max-width: 260px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  .hud-select option, .hud-select optgroup {
+    background: #0a131a;
+    color: #eef2f5;
+  }
+
+  .hud-plate {
+    background: rgba(10, 19, 26, 0.88);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+  .coord-info {
+    font-family: monospace;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    white-space: nowrap;
+  }
+  .coord-info b { color: var(--gold); }
+  .hud-controls { display: flex; gap: 6px; }
+  .hud-btn {
+    background: rgba(10, 19, 26, 0.9);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    color: #fff;
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 6px 11px;
+    border-radius: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .hud-btn:hover { background: #fff; color: var(--ink); }
+  #speedPlate { text-align: right; min-width: 100px; padding: 4px 9px; }
+  .speed-num { font-family: monospace; font-size: 1.55rem; font-weight: 700; line-height: 1; }
+  .speed-unit { font-size: 0.66rem; opacity: 0.7; margin-left: 2px; }
+  .sub-stat { font-family: monospace; font-size: 0.68rem; opacity: 0.7; margin-top: 1px; }
+  #machStat { color: var(--burn); display: none; }
+
+  #flyStrip { display: none; margin-top: 4px; }
+  .meter {
+    height: 4px;
+    background: rgba(255,255,255,0.16);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 3px;
+    position: relative;
+  }
+  .meter i {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0%;
+    background: var(--sky);
+    transition: width 0.1s linear;
+  }
+  #burnMeter i { background: var(--burn); }
+  #burnMeter.dry i { background: #6b7076; }
+
+  #railPlate {
+    display: none;
+    margin-top: 6px;
+    font-size: 0.72rem;
+    max-width: 220px;
+  }
+  #railLine { font-weight: 700; color: var(--gold); }
+  #railNext { font-family: monospace; opacity: 0.8; font-size: 0.68rem; }
+
+  #objectiveBox {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(env(safe-area-inset-bottom) + 14px);
+    max-width: min(520px, 92vw);
+    background: rgba(10, 19, 26, 0.92);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    padding: 8px 14px;
+    font-size: 0.84rem;
+    display: none;
+    border-radius: 6px;
+    z-index: 20;
+    pointer-events: none;
+  }
+
+  #boardPrompt {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(env(safe-area-inset-bottom) + 150px);
+    background: rgba(10, 19, 26, 0.94);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--gold);
+    border-radius: 10px;
+    padding: 9px 12px;
+    display: none;
+    z-index: 28;
+    text-align: center;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.55);
+    max-width: 90vw;
+  }
+  #boardPrompt.on { display: block; }
+  #boardText { font-size: 0.78rem; opacity: 0.85; margin-bottom: 6px; }
+  #boardText b { color: var(--gold); }
+  #boardBtn {
+    background: var(--gold);
+    color: #0a131a;
+    border: none;
+    font: inherit;
+    font-weight: 700;
+    font-size: 0.85rem;
+    padding: 9px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  #boardBtn:active { transform: scale(0.97); }
+
+  #toast {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 36%;
+    font-size: 1.2rem;
+    font-weight: 700;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    text-shadow: 0 2px 14px rgba(0,0,0,0.9);
+    text-align: center;
+    pointer-events: none;
+    z-index: 30;
+    padding: 6px 16px;
+    background: rgba(10, 19, 26, 0.75);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    max-width: 90vw;
+  }
+  #toast.show { opacity: 1; }
+
+  /* Mobile Touch Controls */
+  .touch-layer {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 30;
+    display: none;
+    padding: 0 12px calc(env(safe-area-inset-bottom) + 12px);
+    justify-content: space-between;
+    align-items: flex-end;
+    pointer-events: none;
+  }
+  .touch-layer.on { display: flex; }
+  .touch-layer > * { pointer-events: auto; }
+  #stick {
+    width: 114px;
+    height: 114px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: rgba(10, 19, 26, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+    flex: none;
+  }
+  #stickNub {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.45);
+    border: 2px solid #fff;
+    pointer-events: none;
+  }
+  .touch-pads {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(62px, auto));
+    gap: 7px;
+    align-items: flex-end;
+  }
+  .pad-btn {
+    min-width: 62px;
+    padding: 10px 11px;
+    text-align: center;
+    border-radius: 6px;
+    background: rgba(10, 19, 26, 0.88);
+    border: 1px solid var(--border);
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #fff;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .pad-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .pad-btn.wide { grid-column: span 2; }
+  .pad-btn.burn { border-color: var(--burn); color: var(--burn); }
+  .pad-btn.burn.active { background: var(--burn); border-color: var(--burn); color: #0a131a; }
+
+  /* Pause Screen */
+  #pauseMenu {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    background: rgba(10, 19, 26, 0.94);
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem;
+  }
+  #pauseMenu.on { display: flex; }
+  #pauseMenu h2 { margin: 0; font-size: 1.4rem; }
+  #pauseMenu p { margin: 0; max-width: 44ch; text-align: center; font-size: 0.88rem; opacity: 0.8; }
+
+  #loginGate {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: radial-gradient(circle at center, #172d3e 0%, #091219 85%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem;
+    transition: opacity 0.4s ease, visibility 0.4s ease;
+  }
+  #loginGate.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .login-card {
+    background: rgba(19, 36, 49, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2.2rem 2rem;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+    text-align: center;
+  }
+  .login-card h2 {
+    margin: 0 0 0.4rem;
+    font-size: 1.4rem;
+    color: var(--paper);
+    letter-spacing: 0.02em;
+  }
+  .login-card p {
+    margin: 0 0 1.5rem;
+    font-size: 0.86rem;
+    opacity: 0.72;
+    line-height: 1.4;
+  }
+  .login-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+  }
+  .login-label {
+    font-size: 0.74rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    opacity: 0.75;
+    margin-bottom: 4px;
+    display: block;
+  }
+  .login-input {
+    width: 100%;
+    background: rgba(10, 19, 26, 0.9);
+    border: 1px solid var(--border);
+    color: var(--paper);
+    font: inherit;
+    font-size: 0.92rem;
+    padding: 11px 14px;
+    border-radius: 7px;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease;
+  }
+  .login-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .login-err {
+    margin-top: 10px;
+    color: #ff6b6b;
+    font-size: 0.8rem;
+    font-weight: 600;
+    min-height: 1.3em;
+    display: none;
+  }
+  .login-btn {
+    width: 100%;
+    margin-top: 18px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 700;
+    padding: 13px;
+    border-radius: 7px;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(229, 57, 130, 0.35);
+    transition: filter 0.15s ease, transform 0.1s ease;
+  }
+  .login-btn:hover { filter: brightness(1.15); }
+  .login-btn:active { transform: scale(0.98); }
+  .logout-link {
+    font-size: 0.76rem;
+    color: var(--gold);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    padding: 4px 8px;
+    border-radius: 4px;
+    opacity: 0.85;
+  }
+  .logout-link:hover { text-decoration: underline; opacity: 1; }
+
+  #netBanner {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    top: calc(env(safe-area-inset-top) + 96px);
+    max-width: min(440px, 92vw);
+    background: rgba(10, 19, 26, 0.95);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--gold);
+    border-left: 4px solid var(--gold);
+    border-radius: 8px;
+    padding: 10px 13px;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    display: none;
+    z-index: 26;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.6);
+  }
+  #netBanner.on { display: block; }
+  #netBanner b { color: var(--gold); }
+  #netBanner p { margin: 5px 0 0; opacity: 0.82; }
+  #netBannerClose {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--paper);
+    font: inherit;
+    font-size: 0.72rem;
+    padding: 5px 12px;
+    border-radius: 5px;
+    margin-top: 8px;
+    cursor: pointer;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="loginGate">
+  <div class="login-card">
+    <div style="font-size:2.2rem;margin-bottom:0.4rem;">🌐</div>
+    <h2>Atlas 3D Explorer</h2>
+    <p>Sign in to launch the simulation.</p>
+
+    <div class="login-fields">
+      <div>
+        <label class="login-label" for="loginUser">Username</label>
+        <input class="login-input" type="text" id="loginUser" placeholder="Username" autocomplete="username" autocapitalize="none">
+      </div>
+      <div>
+        <label class="login-label" for="loginPass">Password</label>
+        <input class="login-input" type="password" id="loginPass" placeholder="Password" autocomplete="current-password">
+      </div>
+    </div>
+
+    <div class="login-err" id="loginErr"></div>
+    <button class="login-btn" id="loginSubmitBtn" type="button">Sign in</button>
+  </div>
+</div>
+
+<div id="launcher">
+  <div class="container">
+    <header>
+      <div class="brand">
+        <h1>Atlas 3D <span class="badge">Satellite Ready</span></h1>
+        <button class="logout-link" id="logoutBtn" type="button">Sign out</button>
+      </div>
+      <p>Drive, fly, and ride the rails through real-world 3D terrain and buildings. Drive close to a subway line and you can board it.</p>
+    </header>
+
+    <div class="readout" id="coordDisplay">40.5755<span>, </span>-73.9805</div>
+    <div id="placeLine">Coney Island (Surf Ave)</div>
+
+    <h2>1. Choose a location</h2>
+    <div class="select-row">
+      <select class="styled-select" id="launcherCitySelect" aria-label="World locations"></select>
+    </div>
+    <div class="grid" id="placeGrid"></div>
+    <div class="input-row">
+      <input type="text" id="customInput" placeholder="Enter latitude, longitude (e.g. 40.7549, -73.9840)">
+      <button class="btn-ghost" id="useCustomBtn" type="button">Use coordinates</button>
+    </div>
+
+    <h2>2. Choose a vehicle</h2>
+    <div class="select-row">
+      <select class="styled-select" id="launcherVehicleSelect" aria-label="Vehicle models"></select>
+    </div>
+    <div class="grid" id="vehicleGrid"></div>
+
+    <h2>3. Layer on an adventure</h2>
+    <div class="grid" id="advGrid"></div>
+
+    <div class="action-bar">
+      <button class="btn-go" id="startBtn" type="button">🚀 Drop in now</button>
+      <span class="hint" id="launchHint">Spawns on the street.</span>
+    </div>
+
+    <details>
+      <summary>Cesium Ion token</summary>
+      <p>This token streams the photorealistic tiles, terrain, and buildings. It is stored in this page's source, so treat the file as sensitive and don't publish it anywhere public. Replacing the value below saves it to this browser only.</p>
+      <div class="input-row">
+        <input type="password" id="tokenField" placeholder="Cesium Ion token">
+        <button class="btn-ghost" id="saveTokenBtn" type="button">Save to this browser</button>
+      </div>
+    </details>
+
+    <details>
+      <summary>About the sign-in</summary>
+      <p>Credentials are checked as salted SHA-256 digests, so the password isn't readable in the page source. This keeps it off a casual reader's screen — it isn't real access control, because everything here runs in your browser and a determined person with developer tools can step around it. Anything that must actually be protected needs a server.</p>
+    </details>
+  </div>
+</div>
+
+<div id="simUI">
+  <div id="cesium"></div>
+  <div id="tunnelVeil"></div>
+  <div id="tunnelTag">IN TUNNEL</div>
+
+  <div id="boot">
+    <h2 style="margin:0;font-size:1.3rem;">Streaming 3D world</h2>
+    <div class="load-bar"><i id="bootFill"></i></div>
+    <div id="bootMsg">Connecting to 3D engine...</div>
+  </div>
+
+  <div id="topBar">
+    <div class="hud-row">
+      <div class="hud-selector-bar">
+        <select class="hud-select" id="inGameCitySelect" aria-label="Jump to location"></select>
+        <select class="hud-select" id="inGameVehicleSelect" aria-label="Change vehicle"></select>
+      </div>
+    </div>
+
+    <div class="hud-row">
+      <div>
+        <div class="hud-plate coord-info">
+          <div><b id="latVal">—</b> lat</div>
+          <div><b id="lonVal">—</b> lon</div>
+        </div>
+        <div class="hud-plate" id="railPlate">
+          <div id="railLine">—</div>
+          <div id="railNext">—</div>
+        </div>
+      </div>
+      <div class="hud-controls">
+        <button class="hud-btn" id="camSwitchBtn" type="button">Cam: Chase</button>
+        <button class="hud-btn" id="pauseBtn" type="button">Pause</button>
+      </div>
+      <div class="hud-plate" id="speedPlate">
+        <div><span class="speed-num" id="speedVal">0</span><span class="speed-unit">km/h</span></div>
+        <div class="sub-stat"><span id="altVal">0</span>m agl</div>
+        <div class="sub-stat" id="machStat">M 0.00</div>
+        <div id="flyStrip">
+          <div class="sub-stat" style="text-align:left;">Throttle <span id="throtVal">75</span>%</div>
+          <div class="meter" id="throtMeter"><i></i></div>
+          <div class="sub-stat" id="burnLabel" style="text-align:left;">Burner</div>
+          <div class="meter" id="burnMeter"><i></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="objectiveBox">
+    <div style="font-size:0.68rem;opacity:0.6;font-family:monospace;font-weight:700;" id="objTitle"></div>
+    <div id="objDesc"></div>
+  </div>
+
+  <div id="boardPrompt">
+    <div id="boardText"></div>
+    <button id="boardBtn" type="button">Board</button>
+  </div>
+
+  <div id="netBanner">
+    <b id="netBannerTitle">Map tiles couldn't be reached</b>
+    <p id="netBannerBody"></p>
+    <button id="netBannerClose" type="button">Dismiss</button>
+  </div>
+
+  <div id="toast"></div>
+
+  <div class="touch-layer" id="touchControls">
+    <div id="stick"><div id="stickNub"></div></div>
+    <div class="touch-pads" id="padContainer"></div>
+  </div>
+
+  <div id="pauseMenu">
+    <h2>Paused</h2>
+    <p id="pauseNote">3D satellite terrain and imagery active.</p>
+    <div style="font-family:monospace;font-size:0.8rem;opacity:0.75;text-align:center;line-height:1.8;" id="controlGuide"></div>
+    <div style="display:flex;gap:10px;margin-top:10px;">
+      <button class="btn-go" id="resumeBtn" type="button">Resume</button>
+      <button class="btn-ghost" id="exitBtn" type="button">Change location</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var $ = function(id) { return document.getElementById(id); };
+
+/* ────────────────────────────────────────────────────────────
+   SHA-256 (pure JS, no secure-context requirement)
+   Used so the sign-in credentials are not readable in source.
+   ──────────────────────────────────────────────────────────── */
+var SHA_K = [
+  0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+  0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+  0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+  0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+  0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+  0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+  0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+  0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+];
+
+function utf8Bytes(str) {
+  var out = [], i, c;
+  for (i = 0; i < str.length; i++) {
+    c = str.charCodeAt(i);
+    if (c < 0x80) out.push(c);
+    else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+    else if (c < 0xd800 || c >= 0xe000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    else {
+      i++;
+      c = 0x10000 + (((c & 0x3ff) << 10) | (str.charCodeAt(i) & 0x3ff));
+      out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    }
+  }
+  return out;
+}
+
+function sha256Hex(message) {
+  var bytes = utf8Bytes(message);
+  var bitLen = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  var hi = Math.floor(bitLen / 0x100000000);
+  var lo = bitLen >>> 0;
+  bytes.push((hi >>> 24) & 255, (hi >>> 16) & 255, (hi >>> 8) & 255, hi & 255);
+  bytes.push((lo >>> 24) & 255, (lo >>> 16) & 255, (lo >>> 8) & 255, lo & 255);
+
+  var h = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  var w = new Array(64);
+  var rr = function(x, n) { return (x >>> n) | (x << (32 - n)); };
+
+  for (var off = 0; off < bytes.length; off += 64) {
+    var t;
+    for (t = 0; t < 16; t++) {
+      w[t] = (bytes[off + t * 4] << 24) | (bytes[off + t * 4 + 1] << 16) |
+             (bytes[off + t * 4 + 2] << 8) | bytes[off + t * 4 + 3];
+    }
+    for (t = 16; t < 64; t++) {
+      var s0 = rr(w[t - 15], 7) ^ rr(w[t - 15], 18) ^ (w[t - 15] >>> 3);
+      var s1 = rr(w[t - 2], 17) ^ rr(w[t - 2], 19) ^ (w[t - 2] >>> 10);
+      w[t] = (w[t - 16] + s0 + w[t - 7] + s1) | 0;
+    }
+    var a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
+    for (t = 0; t < 64; t++) {
+      var S1 = rr(e, 6) ^ rr(e, 11) ^ rr(e, 25);
+      var ch = (e & f) ^ (~e & g);
+      var t1 = (hh + S1 + ch + SHA_K[t] + w[t]) | 0;
+      var S0 = rr(a, 2) ^ rr(a, 13) ^ rr(a, 22);
+      var maj = (a & b) ^ (a & c) ^ (b & c);
+      var t2 = (S0 + maj) | 0;
+      hh = g; g = f; f = e; e = (d + t1) | 0;
+      d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    h[0] = (h[0] + a) | 0; h[1] = (h[1] + b) | 0; h[2] = (h[2] + c) | 0; h[3] = (h[3] + d) | 0;
+    h[4] = (h[4] + e) | 0; h[5] = (h[5] + f) | 0; h[6] = (h[6] + g) | 0; h[7] = (h[7] + hh) | 0;
+  }
+
+  var hex = '';
+  for (var i = 0; i < 8; i++) hex += ('00000000' + (h[i] >>> 0).toString(16)).slice(-8);
+  return hex;
+}
+
+var AUTH_SALT = 'atlas3d.v2.';
+var AUTH_USER_HASH = 'a9d44ae0669759d42c47b4e441f998bf92c707acab881582cb6aec2b78afd20c';
+var AUTH_PASS_HASH = '01f73ebacd4f2a178b34622a9845dfa5538ac4fd37bc1544c41303c2d8b423bd';
+
+function constantTimeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  var diff = 0;
+  for (var i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Cesium Ion token
+   ──────────────────────────────────────────────────────────── */
+var ION_TOKEN_DEFAULT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkZWFkZjE0NC04ZjA3LTQzMDYtYjE1Ni03MDhkYjQ2MTc0NGMiLCJpZCI6NDA2Njk4LCJpYXQiOjE3NzQwMTY0MzN9.m6LD7XKPhbPozNC9BnU9lfHew0jgximeVG15YeVgXEU';
+
+function getIonToken() {
+  try {
+    var stored = localStorage.getItem('atlas_ion_token');
+    if (stored && stored.length > 20) return stored;
+  } catch (e) {}
+  return ION_TOKEN_DEFAULT;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Locations
+   ──────────────────────────────────────────────────────────── */
+var CITIES = [
+  { name: 'Coney Island (Surf Ave)', region: 'New York, USA', group: 'New York', lat: 40.5755, lon: -73.9805, heading: 85 },
+  { name: 'Times Square, Manhattan', region: 'New York, USA', group: 'New York', lat: 40.7580, lon: -73.9855, heading: 210 },
+  { name: 'Central Park South', region: 'New York, USA', group: 'New York', lat: 40.7663, lon: -73.9774, heading: 30 },
+  { name: 'Seaford, Long Island', region: 'New York, USA', group: 'New York', lat: 40.6659, lon: -73.4901, heading: 270 },
+  { name: 'Brooklyn Bridge', region: 'New York, USA', group: 'New York', lat: 40.7061, lon: -73.9969, heading: 130 },
+  { name: 'Statue of Liberty', region: 'New York, USA', group: 'New York', lat: 40.6892, lon: -74.0445, heading: 45 },
+  { name: 'Roosevelt Ave, Queens', region: 'New York, USA', group: 'New York', lat: 40.7468, lon: -73.8913, heading: 270 },
+  { name: 'JFK International', region: 'New York, USA', group: 'New York', lat: 40.6413, lon: -73.7781, heading: 130 },
+  { name: 'San Francisco (Lombard St)', region: 'California, USA', group: 'United States', lat: 37.8021, lon: -122.4187, heading: 90 },
+  { name: 'Golden Gate Bridge', region: 'California, USA', group: 'United States', lat: 37.8199, lon: -122.4783, heading: 0 },
+  { name: 'Los Angeles (Hollywood Blvd)', region: 'California, USA', group: 'United States', lat: 34.1016, lon: -118.3416, heading: 90 },
+  { name: 'Las Vegas Strip (Bellagio)', region: 'Nevada, USA', group: 'United States', lat: 36.1126, lon: -115.1767, heading: 180 },
+  { name: 'Miami (Ocean Drive)', region: 'Florida, USA', group: 'United States', lat: 25.7801, lon: -80.1303, heading: 0 },
+  { name: 'Naples Pier', region: 'Florida, USA', group: 'United States', lat: 26.1310, lon: -81.8076, heading: 90 },
+  { name: 'Chicago (The Loop / Wacker)', region: 'Illinois, USA', group: 'United States', lat: 41.8872, lon: -87.6298, heading: 90 },
+  { name: 'Seattle (Space Needle)', region: 'Washington, USA', group: 'United States', lat: 47.6205, lon: -122.3493, heading: 200 },
+  { name: 'Boston (Fenway Park)', region: 'Massachusetts, USA', group: 'United States', lat: 42.3467, lon: -71.0972, heading: 45 },
+  { name: 'Washington (National Mall)', region: 'D.C., USA', group: 'United States', lat: 38.8895, lon: -77.0353, heading: 270 },
+  { name: 'Philadelphia (Independence Hall)', region: 'Pennsylvania, USA', group: 'United States', lat: 39.9489, lon: -75.1500, heading: 90 },
+  { name: 'Philadelphia (Museum Steps)', region: 'Pennsylvania, USA', group: 'United States', lat: 39.9656, lon: -75.1810, heading: 120 },
+  { name: 'New Orleans (French Quarter)', region: 'Louisiana, USA', group: 'United States', lat: 29.9584, lon: -90.0644, heading: 45 },
+  { name: 'Denver (Downtown)', region: 'Colorado, USA', group: 'United States', lat: 39.7392, lon: -104.9903, heading: 130 },
+  { name: 'Austin (Congress Ave)', region: 'Texas, USA', group: 'United States', lat: 30.2672, lon: -97.7431, heading: 0 },
+  { name: 'Grand Canyon (South Rim)', region: 'Arizona, USA', group: 'United States', lat: 36.0544, lon: -112.1401, heading: 60 },
+  { name: 'Monument Valley', region: 'Utah, USA', group: 'United States', lat: 36.9980, lon: -110.0985, heading: 180 },
+  { name: 'Yosemite (El Capitan)', region: 'California, USA', group: 'United States', lat: 37.7341, lon: -119.6378, heading: 90 },
+  { name: 'Niagara Falls', region: 'New York, USA', group: 'United States', lat: 43.0799, lon: -79.0747, heading: 250 },
+  { name: 'Honolulu (Waikiki Beach)', region: 'Hawaii, USA', group: 'United States', lat: 21.2766, lon: -157.8273, heading: 120 },
+  { name: 'Toronto (CN Tower)', region: 'Canada', group: 'Americas', lat: 43.6426, lon: -79.3871, heading: 180 },
+  { name: 'Vancouver (Downtown)', region: 'Canada', group: 'Americas', lat: 49.2827, lon: -123.1207, heading: 300 },
+  { name: 'Mexico City (Zócalo)', region: 'Mexico', group: 'Americas', lat: 19.4326, lon: -99.1332, heading: 0 },
+  { name: 'Havana (Malecón)', region: 'Cuba', group: 'Americas', lat: 23.1400, lon: -82.3800, heading: 90 },
+  { name: 'Panama Canal (Miraflores)', region: 'Panama', group: 'Americas', lat: 8.9960, lon: -79.5910, heading: 0 },
+  { name: 'Machu Picchu', region: 'Peru', group: 'Americas', lat: -13.1631, lon: -72.5450, heading: 150 },
+  { name: 'Salar de Uyuni', region: 'Bolivia', group: 'Americas', lat: -20.1338, lon: -67.4891, heading: 90 },
+  { name: 'Rio de Janeiro (Copacabana)', region: 'Brazil', group: 'Americas', lat: -22.9711, lon: -43.1822, heading: 40 },
+  { name: 'Buenos Aires (Obelisco)', region: 'Argentina', group: 'Americas', lat: -34.6037, lon: -58.3816, heading: 180 },
+  { name: 'London (Tower Bridge)', region: 'United Kingdom', group: 'Europe', lat: 51.5055, lon: -0.0754, heading: 20 },
+  { name: 'Paris (Eiffel Tower)', region: 'France', group: 'Europe', lat: 48.8584, lon: 2.2945, heading: 140 },
+  { name: 'Rome (Colosseum)', region: 'Italy', group: 'Europe', lat: 41.8902, lon: 12.4922, heading: 300 },
+  { name: 'Venice (Grand Canal)', region: 'Italy', group: 'Europe', lat: 45.4408, lon: 12.3155, heading: 220 },
+  { name: 'Berlin (Brandenburg Gate)', region: 'Germany', group: 'Europe', lat: 52.5163, lon: 13.3777, heading: 85 },
+  { name: 'Barcelona (Sagrada Família)', region: 'Spain', group: 'Europe', lat: 41.4036, lon: 2.1744, heading: 220 },
+  { name: 'Lisbon (Praça do Comércio)', region: 'Portugal', group: 'Europe', lat: 38.7078, lon: -9.1366, heading: 0 },
+  { name: 'Amsterdam (Canal Ring)', region: 'Netherlands', group: 'Europe', lat: 52.3676, lon: 4.8990, heading: 45 },
+  { name: 'Prague (Charles Bridge)', region: 'Czechia', group: 'Europe', lat: 50.0865, lon: 14.4114, heading: 60 },
+  { name: 'Vienna (Stephansplatz)', region: 'Austria', group: 'Europe', lat: 48.2082, lon: 16.3738, heading: 180 },
+  { name: 'Zermatt (Matterhorn)', region: 'Switzerland', group: 'Europe', lat: 45.9763, lon: 7.6586, heading: 0 },
+  { name: 'Stockholm (Gamla Stan)', region: 'Sweden', group: 'Europe', lat: 59.3251, lon: 18.0711, heading: 350 },
+  { name: 'Reykjavík (Harbour)', region: 'Iceland', group: 'Europe', lat: 64.1466, lon: -21.9426, heading: 270 },
+  { name: 'Santorini (Oia)', region: 'Greece', group: 'Europe', lat: 36.4618, lon: 25.3753, heading: 250 },
+  { name: 'Athens (Acropolis)', region: 'Greece', group: 'Europe', lat: 37.9715, lon: 23.7267, heading: 45 },
+  { name: 'Kyiv (Maidan Nezalezhnosti)', region: 'Ukraine', group: 'Europe', lat: 50.4501, lon: 30.5234, heading: 90 },
+  { name: 'Moscow (Red Square)', region: 'Russia', group: 'Europe', lat: 55.7539, lon: 37.6208, heading: 20 },
+  { name: 'Istanbul (Hagia Sophia)', region: 'Türkiye', group: 'Africa & Middle East', lat: 41.0086, lon: 28.9802, heading: 300 },
+  { name: 'Cairo (Pyramids of Giza)', region: 'Egypt', group: 'Africa & Middle East', lat: 29.9792, lon: 31.1342, heading: 90 },
+  { name: 'Petra (Al-Khazneh)', region: 'Jordan', group: 'Africa & Middle East', lat: 30.3285, lon: 35.4444, heading: 0 },
+  { name: 'Jerusalem (Old City)', region: 'Israel', group: 'Africa & Middle East', lat: 31.7767, lon: 35.2345, heading: 90 },
+  { name: 'Dubai (Burj Khalifa)', region: 'United Arab Emirates', group: 'Africa & Middle East', lat: 25.1972, lon: 55.2744, heading: 45 },
+  { name: 'Marrakech (Jemaa el-Fnaa)', region: 'Morocco', group: 'Africa & Middle East', lat: 31.6258, lon: -7.9891, heading: 130 },
+  { name: 'Cape Town (Table Mountain)', region: 'South Africa', group: 'Africa & Middle East', lat: -33.9575, lon: 18.4031, heading: 330 },
+  { name: 'Victoria Falls', region: 'Zambia / Zimbabwe', group: 'Africa & Middle East', lat: -17.9243, lon: 25.8572, heading: 180 },
+  { name: 'Tokyo (Shibuya Crossing)', region: 'Japan', group: 'Asia', lat: 35.6595, lon: 139.7005, heading: 20 },
+  { name: 'Kyoto (Gion Historic District)', region: 'Japan', group: 'Asia', lat: 35.0037, lon: 135.7772, heading: 90 },
+  { name: 'Osaka (Dotonbori)', region: 'Japan', group: 'Asia', lat: 34.6687, lon: 135.5013, heading: 90 },
+  { name: 'Mount Fuji (Summit)', region: 'Japan', group: 'Asia', lat: 35.3606, lon: 138.7274, heading: 45 },
+  { name: 'Seoul (Gyeongbokgung)', region: 'South Korea', group: 'Asia', lat: 37.5796, lon: 126.9770, heading: 180 },
+  { name: 'Beijing (Forbidden City)', region: 'China', group: 'Asia', lat: 39.9163, lon: 116.3972, heading: 180 },
+  { name: 'Shanghai (The Bund)', region: 'China', group: 'Asia', lat: 31.2397, lon: 121.4900, heading: 90 },
+  { name: 'Hong Kong (Victoria Harbour)', region: 'Hong Kong', group: 'Asia', lat: 22.2932, lon: 114.1713, heading: 220 },
+  { name: 'Singapore (Marina Bay)', region: 'Singapore', group: 'Asia', lat: 1.2838, lon: 103.8591, heading: 60 },
+  { name: 'Bangkok (Grand Palace)', region: 'Thailand', group: 'Asia', lat: 13.7500, lon: 100.4913, heading: 90 },
+  { name: 'Mumbai (Gateway of India)', region: 'India', group: 'Asia', lat: 18.9220, lon: 72.8347, heading: 270 },
+  { name: 'Delhi (India Gate)', region: 'India', group: 'Asia', lat: 28.6129, lon: 77.2295, heading: 270 },
+  { name: 'Everest Base Camp', region: 'Nepal', group: 'Asia', lat: 28.0026, lon: 86.8528, heading: 30 },
+  { name: 'Bali (Uluwatu Cliffs)', region: 'Indonesia', group: 'Asia', lat: -8.8291, lon: 115.0849, heading: 240 },
+  { name: 'Sydney (Opera House)', region: 'Australia', group: 'Oceania', lat: -33.8568, lon: 151.2153, heading: 350 },
+  { name: 'Melbourne (Flinders St)', region: 'Australia', group: 'Oceania', lat: -37.8183, lon: 144.9671, heading: 90 },
+  { name: 'Uluru', region: 'Australia', group: 'Oceania', lat: -25.3444, lon: 131.0369, heading: 0 },
+  { name: 'Auckland (Waterfront)', region: 'New Zealand', group: 'Oceania', lat: -36.8443, lon: 174.7676, heading: 180 },
+  { name: 'Queenstown (Lake Wakatipu)', region: 'New Zealand', group: 'Oceania', lat: -45.0312, lon: 168.6626, heading: 240 }
+];
+
+var CITY_GROUP_ORDER = ['New York', 'United States', 'Americas', 'Europe', 'Africa & Middle East', 'Asia', 'Oceania'];
+
+/* ────────────────────────────────────────────────────────────
+   Vehicles
+   ──────────────────────────────────────────────────────────── */
+var VEHICLES = {
+  sedan:  { label: 'Sedan', note: 'fast highway cruiser', kind: 'drive', topSpeed: 65, accel: 24, brake: 38, steer: 1.8, ride: 0.42, color: '#2c3e50' },
+  taxi:   { label: 'NYC Taxi', note: 'rapid city cab', kind: 'drive', topSpeed: 62, accel: 23, brake: 36, steer: 1.9, ride: 0.42, color: '#f39c12' },
+  sport:  { label: 'Sport Coupe', note: 'hypercar acceleration', kind: 'drive', topSpeed: 110, accel: 44, brake: 58, steer: 2.2, ride: 0.36, color: '#e74c3c' },
+  subway: { label: 'NYC Subway Train', note: 'runs on elevated + tunnel track', kind: 'train', topSpeed: 60, accel: 20, brake: 34, steer: 1.2, ride: 4.2, color: '#0039A6', cars: 3 },
+  heli:   { label: 'Helicopter', note: 'agile hover flight', kind: 'fly', topSpeed: 85, accel: 18, climb: 15, ride: 2.5, color: '#16a085' },
+  cessna: { label: 'Light Cessna', note: 'scenic cruising', kind: 'fly', topSpeed: 95, accel: 12, climb: 9, ride: 2.5, color: '#d35400' },
+  jet:    { label: 'Supersonic Jet', note: 'throttle + afterburner', kind: 'fly', topSpeed: 380, accel: 48, climb: 36, ride: 3.0, color: '#8e44ad',
+            afterburner: { mult: 1.7, drain: 20, regen: 8, relight: 35, minThrottle: 0.85 } }
+};
+
+/* ────────────────────────────────────────────────────────────
+   Rail network — each node carries its own height above ground.
+   Negative h = tunnel, positive h = elevated / viaduct.
+   ──────────────────────────────────────────────────────────── */
+var SUBWAY_LINES = [
+  {
+    name: 'Brighton Line (Q)',
+    color: '#FCCC0A',
+    nodes: [
+      { lat: 40.5774, lon: -73.9812, h:  10, s: 'Coney Island–Stillwell Av' },
+      { lat: 40.5762, lon: -73.9758, h:   7, s: 'W 8 St–NY Aquarium' },
+      { lat: 40.5778, lon: -73.9613, h:   9, s: 'Brighton Beach' },
+      { lat: 40.5862, lon: -73.9542, h:   8, s: 'Sheepshead Bay' },
+      { lat: 40.6032, lon: -73.9558, h:  -3, s: 'Kings Highway' },
+      { lat: 40.6293, lon: -73.9568, h:  -4, s: 'Newkirk Plaza' },
+      { lat: 40.6616, lon: -73.9622, h:  -6, s: 'Prospect Park' },
+      { lat: 40.6844, lon: -73.9785, h: -12, s: 'Atlantic Av–Barclays Ctr' },
+      { lat: 40.7012, lon: -73.9898, h: -10, s: 'DeKalb Av' },
+      { lat: 40.7093, lon: -73.9935, h:  30, s: 'Manhattan Bridge' },
+      { lat: 40.7183, lon: -73.9999, h: -12, s: 'Canal St' },
+      { lat: 40.7358, lon: -73.9906, h: -12, s: '14 St–Union Sq' },
+      { lat: 40.7497, lon: -73.9878, h: -14, s: '34 St–Herald Sq' },
+      { lat: 40.7580, lon: -73.9855, h: -14, s: 'Times Sq–42 St' },
+      { lat: 40.7648, lon: -73.9806, h: -16, s: '57 St–7 Av' },
+      { lat: 40.7663, lon: -73.9772, h: -16, s: 'Lexington Av / 59 St' }
+    ]
+  },
+  {
+    name: 'Culver Line (F)',
+    color: '#FF6319',
+    nodes: [
+      { lat: 40.5774, lon: -73.9812, h:  10, s: 'Coney Island–Stillwell Av' },
+      { lat: 40.5832, lon: -73.9744, h:   9, s: 'Neptune Av' },
+      { lat: 40.5896, lon: -73.9734, h:   8, s: 'Avenue X' },
+      { lat: 40.6082, lon: -73.9729, h:   8, s: 'Kings Highway' },
+      { lat: 40.6303, lon: -73.9755, h:   7, s: 'Avenue I' },
+      { lat: 40.6440, lon: -73.9796, h:  -5, s: 'Church Av' },
+      { lat: 40.6703, lon: -73.9888, h:  26, s: 'Culver Viaduct' },
+      { lat: 40.6923, lon: -73.9872, h: -10, s: 'Jay St–MetroTech' },
+      { lat: 40.7126, lon: -74.0099, h: -24, s: 'East River Tube' },
+      { lat: 40.7253, lon: -73.9967, h: -14, s: '2 Av' },
+      { lat: 40.7527, lon: -73.9822, h: -16, s: '42 St–Bryant Park' }
+    ]
+  },
+  {
+    name: 'Flushing Line (7)',
+    color: '#B933AD',
+    nodes: [
+      { lat: 40.7557, lon: -73.9995, h: -25, s: '34 St–Hudson Yards' },
+      { lat: 40.7580, lon: -73.9855, h: -20, s: 'Times Sq–42 St' },
+      { lat: 40.7516, lon: -73.9767, h: -18, s: 'Grand Central–42 St' },
+      { lat: 40.7424, lon: -73.9576, h: -22, s: 'Vernon Blvd–Jackson Av' },
+      { lat: 40.7498, lon: -73.9388, h:  13, s: 'Queensboro Plaza' },
+      { lat: 40.7461, lon: -73.9136, h:  11, s: '61 St–Woodside' },
+      { lat: 40.7468, lon: -73.8913, h:  10, s: '74 St–Broadway' },
+      { lat: 40.7501, lon: -73.8626, h:  10, s: 'Junction Blvd' },
+      { lat: 40.7523, lon: -73.8448, h:  10, s: '111 St' },
+      { lat: 40.7596, lon: -73.8300, h:  -8, s: 'Flushing–Main St' }
+    ]
+  },
+  {
+    name: 'Astoria Line (N/W)',
+    color: '#FCCC0A',
+    nodes: [
+      { lat: 40.7750, lon: -73.9120, h:  11, s: 'Astoria–Ditmars Blvd' },
+      { lat: 40.7700, lon: -73.9175, h:  11, s: 'Astoria Blvd' },
+      { lat: 40.7663, lon: -73.9210, h:  10, s: '30 Av' },
+      { lat: 40.7614, lon: -73.9256, h:  10, s: 'Broadway' },
+      { lat: 40.7566, lon: -73.9297, h:  10, s: '36 Av' },
+      { lat: 40.7508, lon: -73.9401, h:  12, s: 'Queensboro Plaza' },
+      { lat: 40.7424, lon: -73.9530, h: -20, s: 'Queens Plaza portal' },
+      { lat: 40.7643, lon: -73.9730, h: -18, s: 'Lexington Av / 59 St' },
+      { lat: 40.7580, lon: -73.9855, h: -15, s: 'Times Sq–42 St' }
+    ]
+  }
+];
+
+/* ────────────────────────────────────────────────────────────
+   Adventures
+   ──────────────────────────────────────────────────────────── */
+var ADVENTURES = [
+  { name: 'Free Roam', note: 'no objectives, full freedom' },
+  {
+    name: 'Coney Island Boardwalk',
+    note: 'Surf Ave to Brighton Beach',
+    lat: 40.5755, lon: -73.9805, vehicle: 'sport',
+    objectives: [
+      { type: 'waypoint', lat: 40.5762, lon: -73.9758, radius: 70, label: 'Past the NY Aquarium' },
+      { type: 'waypoint', lat: 40.5778, lon: -73.9613, radius: 80, label: 'Brighton Beach Ave' },
+      { type: 'linger', lat: 40.5745, lon: -73.9600, radius: 80, seconds: 5, label: 'Park overlooking the ocean' }
+    ]
+  },
+  {
+    name: 'Manhattan Crosstown Loop',
+    note: 'Midtown cross-city circuit',
+    lat: 40.7580, lon: -73.9855, vehicle: 'taxi',
+    objectives: [
+      { type: 'waypoint', lat: 40.7484, lon: -73.9857, radius: 80, label: 'Empire State Building' },
+      { type: 'waypoint', lat: 40.7527, lon: -73.9772, radius: 80, label: 'Grand Central Terminal' },
+      { type: 'waypoint', lat: 40.7614, lon: -73.9776, radius: 80, label: 'Rockefeller Center' },
+      { type: 'waypoint', lat: 40.7580, lon: -73.9855, radius: 70, label: 'Return to Times Square' }
+    ]
+  },
+  {
+    name: 'Ride the El',
+    note: 'drive to the rail, then run it',
+    lat: 40.7477, lon: -73.8990, vehicle: 'sedan',
+    objectives: [
+      { type: 'board', label: 'Drive to the elevated 7 line and board' },
+      { type: 'waypoint', lat: 40.7501, lon: -73.8626, radius: 120, label: 'Run east to Junction Blvd' },
+      { type: 'waypoint', lat: 40.7596, lon: -73.8300, radius: 150, label: 'Terminate at Flushing–Main St' }
+    ]
+  },
+  {
+    name: 'Harbor Flyover',
+    note: 'aerial tour of NY Harbor',
+    lat: 40.6892, lon: -74.0445, vehicle: 'heli',
+    objectives: [
+      { type: 'altitude', above: 250, label: 'Climb above 250m' },
+      { type: 'waypoint', lat: 40.7033, lon: -74.0170, radius: 200, label: 'The Battery' },
+      { type: 'waypoint', lat: 40.7061, lon: -73.9969, radius: 200, label: 'Brooklyn Bridge' },
+      { type: 'linger', lat: 40.7061, lon: -73.9969, radius: 250, seconds: 8, label: 'Hold over the bridge' }
+    ]
+  },
+  {
+    name: 'Mach Run to Montauk',
+    note: 'light the burner down Long Island',
+    lat: 40.6659, lon: -73.4901, vehicle: 'jet',
+    objectives: [
+      { type: 'speed', above: 400, label: 'Break 400 km/h on the burner' },
+      { type: 'waypoint', lat: 40.8010, lon: -72.8700, radius: 900, label: 'Overfly the Hamptons' },
+      { type: 'waypoint', lat: 41.0706, lon: -71.8570, radius: 900, label: 'Montauk Point Light' }
+    ]
+  }
+];
+
+var sel = {
+  place: CITIES[0],
+  vehicle: 'sedan',
+  adventure: ADVENTURES[0]
+};
+
+/* ────────────────────────────────────────────────────────────
+   Launcher menu
+   ──────────────────────────────────────────────────────────── */
+function updateCoordDisplay() {
+  $('coordDisplay').innerHTML = sel.place.lat.toFixed(4) + '<span>, </span>' + sel.place.lon.toFixed(4);
+  $('placeLine').textContent = sel.place.name + (sel.place.region ? ' — ' + sel.place.region : '');
+  var v = VEHICLES[sel.vehicle];
+  if (v.kind === 'fly') $('launchHint').textContent = 'Spawns airborne at 340m.';
+  else if (v.kind === 'train') $('launchHint').textContent = 'Spawns on the nearest NYC track.';
+  else $('launchHint').textContent = 'Spawns on the street. Drive near a rail line to board it.';
+}
+
+function buildCityOptions(includePlaceholder) {
+  var html = includePlaceholder ? '<option value="" disabled selected>📍 Jump to location…</option>' : '';
+  CITY_GROUP_ORDER.forEach(function(g) {
+    var members = [];
+    CITIES.forEach(function(c, i) { if (c.group === g) members.push({ c: c, i: i }); });
+    if (!members.length) return;
+    html += '<optgroup label="' + g + '">';
+    members.forEach(function(m) {
+      html += '<option value="' + m.i + '">' + m.c.name + ' — ' + m.c.region + '</option>';
+    });
+    html += '</optgroup>';
+  });
+  return html;
+}
+
+function initMenu() {
+  $('launcherCitySelect').innerHTML = buildCityOptions(false);
+  $('inGameCitySelect').innerHTML = buildCityOptions(true);
+
+  var vehicleOptions = Object.keys(VEHICLES).map(function(id) {
+    var v = VEHICLES[id];
+    var icon = v.kind === 'fly' ? '✈️ ' : (v.kind === 'train' ? '🚇 ' : '🚗 ');
+    return '<option value="' + id + '">' + icon + v.label + ' (' + v.note + ')</option>';
+  }).join('');
+
+  $('launcherVehicleSelect').innerHTML = vehicleOptions;
+  $('inGameVehicleSelect').innerHTML = vehicleOptions;
+
+  $('launcherCitySelect').onchange = function(e) { selectCity(+e.target.value); };
+  $('launcherVehicleSelect').onchange = function(e) { selectVehicle(e.target.value); };
+  $('inGameCitySelect').onchange = function(e) { warpToCity(+e.target.value); };
+  $('inGameVehicleSelect').onchange = function(e) { changeVehicleInGame(e.target.value); };
+
+  var featuredCount = 8;
+  $('placeGrid').innerHTML = CITIES.slice(0, featuredCount).map(function(p, i) {
+    return '<button class="card ' + (i === 0 ? 'on' : '') + '" data-idx="' + i + '" type="button">' +
+      '<b>' + p.name + '</b><em>' + p.lat.toFixed(2) + ', ' + p.lon.toFixed(2) + '</em></button>';
+  }).join('');
+  $('placeGrid').onclick = function(e) {
+    var card = e.target.closest('.card'); if (!card) return;
+    selectCity(+card.dataset.idx);
+  };
+
+  $('vehicleGrid').innerHTML = Object.keys(VEHICLES).map(function(id, i) {
+    var v = VEHICLES[id];
+    return '<button class="card ' + (i === 0 ? 'on' : '') + '" data-id="' + id + '" type="button">' +
+      '<b>' + v.label + '</b><em>' + v.note + '</em></button>';
+  }).join('');
+  $('vehicleGrid').onclick = function(e) {
+    var card = e.target.closest('.card'); if (!card) return;
+    selectVehicle(card.dataset.id);
+  };
+
+  $('advGrid').innerHTML = ADVENTURES.map(function(a, i) {
+    return '<button class="card ' + (i === 0 ? 'on' : '') + '" data-idx="' + i + '" type="button">' +
+      '<b>' + a.name + '</b><em>' + a.note + '</em></button>';
+  }).join('');
+  $('advGrid').onclick = function(e) {
+    var card = e.target.closest('.card'); if (!card) return;
+    var adv = ADVENTURES[+card.dataset.idx];
+    sel.adventure = adv;
+    Array.prototype.forEach.call($('advGrid').children, function(c) { c.classList.toggle('on', c === card); });
+    if (adv.lat !== undefined) {
+      sel.place = { name: adv.name, region: 'Adventure zone', lat: adv.lat, lon: adv.lon, heading: adv.heading || 0 };
+      Array.prototype.forEach.call($('placeGrid').children, function(c) { c.classList.remove('on'); });
+    }
+    if (adv.vehicle) selectVehicle(adv.vehicle);
+    updateCoordDisplay();
+  };
+
+  $('useCustomBtn').onclick = function() {
+    var val = $('customInput').value.trim();
+    var match = val.match(/(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)/);
+    if (!match) { $('customInput').value = ''; $('customInput').placeholder = 'Enter two numbers, e.g. 40.7549, -73.9840'; return; }
+    var la = +match[1], lo = +match[2];
+    if (la < -90 || la > 90 || lo < -180 || lo > 180) {
+      $('customInput').value = ''; $('customInput').placeholder = 'Latitude −90…90, longitude −180…180';
+      return;
+    }
+    sel.place = { name: 'Custom coordinates', region: la.toFixed(4) + ', ' + lo.toFixed(4), lat: la, lon: lo, heading: 0 };
+    Array.prototype.forEach.call($('placeGrid').children, function(c) { c.classList.remove('on'); });
+    updateCoordDisplay();
+  };
+
+  $('saveTokenBtn').onclick = function() {
+    var t = $('tokenField').value.trim();
+    try {
+      if (t && t !== ION_TOKEN_DEFAULT) localStorage.setItem('atlas_ion_token', t);
+      else localStorage.removeItem('atlas_ion_token');
+      $('saveTokenBtn').textContent = 'Saved';
+      setTimeout(function() { $('saveTokenBtn').textContent = 'Save to this browser'; }, 1600);
+    } catch (e) {
+      $('saveTokenBtn').textContent = 'Storage unavailable';
+    }
+  };
+
+  $('tokenField').value = getIonToken();
+  updateCoordDisplay();
+}
+
+function selectCity(idx) {
+  var p = CITIES[idx];
+  if (!p) return;
+  sel.place = p;
+  $('launcherCitySelect').value = idx;
+  Array.prototype.forEach.call($('placeGrid').children, function(c) {
+    c.classList.toggle('on', +c.dataset.idx === idx);
+  });
+  updateCoordDisplay();
+}
+
+function selectVehicle(vehId) {
+  if (!VEHICLES[vehId]) return;
+  sel.vehicle = vehId;
+  $('launcherVehicleSelect').value = vehId;
+  Array.prototype.forEach.call($('vehicleGrid').children, function(c) {
+    c.classList.toggle('on', c.dataset.id === vehId);
+  });
+  updateCoordDisplay();
+}
+
+/* ────────────────────────────────────────────────────────────
+   Scene bootstrap
+   ──────────────────────────────────────────────────────────── */
+var viewer = null;
+var scene = null;
+var vehicleEntity = null;
+var trailerEntities = [];
+var simState = null;
+var isPaused = false;
+var lastTime = performance.now();
+var photoTileset = null;
+var osmTileset = null;
+var isPhotorealActive = false;
+var BASE_FOV = 60;
+var sceneStatus = { photoreal: false, imagery: false, terrain: false, buildings: false, grid: false };
+
+function updateBoot(pct, text) {
+  $('bootFill').style.width = pct + '%';
+  if (text) $('bootMsg').textContent = text;
+}
+
+function withTimeout(promise, ms, fallbackValue) {
+  return Promise.race([
+    promise,
+    new Promise(function(resolve) { setTimeout(function() { resolve(fallbackValue); }, ms); })
+  ]);
+}
+
+function waitForCesium() {
+  if (window.Cesium) return Promise.resolve(true);
+  return new Promise(function(resolve) {
+    var waited = 0;
+    var checkInterval = setInterval(function() {
+      waited += 100;
+      if (window.Cesium) { clearInterval(checkInterval); resolve(true); }
+      else if (waited > 12000) { clearInterval(checkInterval); resolve(false); }
+    }, 100);
+  });
+}
+
+function attachPhotoreal(tileset) {
+  if (!tileset || isPhotorealActive) return;
+  photoTileset = tileset;
+  photoTileset.maximumScreenSpaceError = 16;
+  scene.primitives.add(photoTileset);
+  isPhotorealActive = true;
+  sceneStatus.photoreal = true;
+  scene.globe.show = false;
+  if (osmTileset) {
+    try { scene.primitives.remove(osmTileset); } catch (e) {}
+    osmTileset = null;
+  }
+}
+
+async function buildFallbackScene() {
+  scene.globe.show = true;
+  updateBoot(60, 'Streaming satellite imagery…');
+
+  try {
+    var satelliteProvider = await withTimeout(Cesium.createWorldImageryAsync({
+      style: Cesium.IonWorldImageryStyle.AERIAL_WITH_LABELS
+    }), 4000, null);
+    if (satelliteProvider) { viewer.imageryLayers.add(satelliteProvider); sceneStatus.imagery = true; }
+  } catch (e) {
+    console.warn('Ion imagery unavailable, trying ArcGIS');
+  }
+
+  if (viewer.imageryLayers.length === 0) {
+    try {
+      var esriProvider = await Cesium.ArcGisMapServerImageryProvider.fromUrl(
+        'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer',
+        { enablePickFeatures: false }
+      );
+      viewer.imageryLayers.addImageryProvider(esriProvider);
+      sceneStatus.imagery = true;
+    } catch (err2) {
+      console.warn('ArcGIS satellite error:', err2);
+    }
+  }
+
+  // Every tile source is remote. If they are all unreachable the globe
+  // renders as flat void, so fall back to a grid generated in-browser:
+  // no imagery, but the world still reads as a place you can drive on.
+  if (!sceneStatus.imagery) {
+    try {
+      viewer.imageryLayers.addImageryProvider(new Cesium.GridImageryProvider({
+        cells: 4,
+        color: Cesium.Color.fromCssColorString('#3b9bd6').withAlpha(0.55),
+        glowColor: Cesium.Color.fromCssColorString('#3b9bd6').withAlpha(0.12),
+        backgroundColor: Cesium.Color.fromCssColorString('#101d27')
+      }));
+      sceneStatus.grid = true;
+    } catch (gridErr) {
+      console.warn('Grid fallback failed:', gridErr);
+    }
+  }
+
+  updateBoot(75, 'Streaming terrain elevations…');
+  try {
+    var terrain = await withTimeout(Cesium.createWorldTerrainAsync({ requestVertexNormals: true }), 4000, null);
+    if (terrain) { viewer.terrainProvider = terrain; sceneStatus.terrain = true; }
+  } catch (e) {
+    console.warn('Terrain load failed:', e);
+  }
+
+  updateBoot(85, 'Rendering 3D buildings…');
+  try {
+    var osm = await withTimeout(Cesium.createOsmBuildingsAsync({
+      defaultColor: Cesium.Color.fromCssColorString('#e4ded5')
+    }), 4000, null);
+    if (osm && !isPhotorealActive) {
+      osm.maximumScreenSpaceError = 8;
+      scene.primitives.add(osm);
+      osmTileset = osm;
+      sceneStatus.buildings = true;
+    }
+  } catch (e) {
+    console.warn('OSM buildings load failed:', e);
+  }
+}
+
+async function startEngine() {
+  document.body.classList.add('running');
+  $('launcher').style.display = 'none';
+  $('simUI').style.display = 'block';
+
+  updateBoot(15, 'Preparing 3D engine…');
+
+  var ready = await waitForCesium();
+  if (!ready || !window.Cesium) {
+    $('bootMsg').innerHTML = '<span style="color:#f87171">Cesium did not load. Check the connection and reload the page.</span>';
+    return;
+  }
+
+  try {
+    Cesium.Ion.defaultAccessToken = ($('tokenField').value || '').trim() || getIonToken();
+
+    updateBoot(30, 'Creating 3D viewport…');
+    viewer = new Cesium.Viewer('cesium', {
+      baseLayer: false,
+      animation: false,
+      timeline: false,
+      baseLayerPicker: false,
+      geocoder: false,
+      homeButton: false,
+      sceneModePicker: false,
+      navigationHelpButton: false,
+      fullscreenButton: false,
+      infoBox: false,
+      selectionIndicator: false,
+      skyBox: false,
+      skyAtmosphere: new Cesium.SkyAtmosphere(),
+      contextOptions: { webgl: { powerPreference: 'high-performance' } }
+    });
+
+    scene = viewer.scene;
+    scene.globe.depthTestAgainstTerrain = true;
+    scene.globe.enableLighting = false;
+    scene.globe.baseColor = Cesium.Color.fromCssColorString('#1c262b');
+    scene.backgroundColor = Cesium.Color.fromCssColorString('#0b131a');
+    scene.fog.enabled = true;
+    scene.fog.density = 0.00012;
+    if (scene.camera.frustum.fov !== undefined) {
+      BASE_FOV = Cesium.Math.toDegrees(scene.camera.frustum.fov);
+    }
+
+    var cc = scene.screenSpaceCameraController;
+    cc.enableRotate = false; cc.enableTranslate = false; cc.enableZoom = false;
+    cc.enableTilt = false; cc.enableLook = false;
+
+    // Photorealistic tiles: try briefly, then keep loading in the background
+    // and upgrade the scene when they arrive instead of dropping them.
+    updateBoot(45, 'Connecting to photorealistic 3D…');
+    var photoPromise = null;
+    try {
+      photoPromise = Cesium.createGooglePhotorealistic3DTileset().catch(function(e) {
+        console.warn('Photorealistic tiles unavailable:', e);
+        return null;
+      });
+    } catch (e) {
+      photoPromise = Promise.resolve(null);
+    }
+
+    var quickPhoto = await withTimeout(photoPromise, 3500, null);
+    if (quickPhoto) {
+      attachPhotoreal(quickPhoto);
+    } else {
+      await buildFallbackScene();
+      photoPromise.then(function(ts) {
+        if (ts && !isPhotorealActive && scene) {
+          attachPhotoreal(ts);
+          showToast('Photorealistic 3D loaded');
+        }
+      });
+    }
+
+    updateBoot(95, 'Placing vehicle…');
+    var groundHeight = await probeTerrainHeight(sel.place.lat, sel.place.lon);
+
+    initVehicleRig(groundHeight);
+    initInputControls();
+
+    $('inGameVehicleSelect').value = sel.vehicle;
+    var matchedIdx = -1;
+    for (var ci = 0; ci < CITIES.length; ci++) {
+      if (Math.abs(CITIES[ci].lat - sel.place.lat) < 0.001 && Math.abs(CITIES[ci].lon - sel.place.lon) < 0.001) {
+        matchedIdx = ci; break;
+      }
+    }
+    if (matchedIdx !== -1) $('inGameCitySelect').value = matchedIdx;
+
+    reportSceneStatus();
+    setTimeout(function() { $('boot').classList.add('gone'); }, 400);
+
+    // Tiles are still streaming at this point, so re-settle onto real
+    // geometry once it exists rather than trusting the first probe.
+    settleSpawn();
+
+    requestAnimationFrame(gameLoop);
+
+  } catch (criticalErr) {
+    console.error('Fatal initialization error:', criticalErr);
+    $('bootMsg').innerHTML = '<span style="color:#f87171">Could not start the 3D scene: ' + criticalErr.message + '</span>';
+  }
+}
+
+function reportSceneStatus() {
+  var anyTiles = sceneStatus.photoreal || sceneStatus.imagery || sceneStatus.terrain || sceneStatus.buildings;
+
+  if (anyTiles) {
+    updateBoot(100, 'Ready');
+    if (!sceneStatus.photoreal && !sceneStatus.imagery) showBanner(
+      'Satellite imagery unavailable',
+      'Terrain loaded but the imagery service didn\u2019t respond. The ground will look flat-shaded.'
+    );
+    return;
+  }
+
+  // Nothing remote loaded at all. Saying "Ready" here would be a lie.
+  updateBoot(100, 'Running without map tiles');
+  showBanner(
+    'Map tiles couldn\u2019t be reached',
+    'Every tile source failed, including ones that need no login \u2014 so this is the page being blocked from making network requests, not a bad token. ' +
+    'Embedded viewers and in-app previews usually block them. Save this file and open it in Safari or Chrome, or host it, and the imagery should load. ' +
+    'Driving, flying, and the rail network all still work on the grid below.'
+  );
+}
+
+function showBanner(title, body) {
+  $('netBannerTitle').textContent = title;
+  $('netBannerBody').textContent = body;
+  $('netBanner').classList.add('on');
+}
+
+async function probeTerrainHeight(lat, lon) {
+  var groundHeight = 2.0;
+  try {
+    var carto = Cesium.Cartographic.fromDegrees(lon, lat);
+    if (viewer && viewer.terrainProvider) {
+      var sampled = await withTimeout(
+        Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [carto]),
+        1800,
+        null
+      );
+      if (sampled && sampled[0] && isFinite(sampled[0].height)) groundHeight = sampled[0].height;
+    }
+  } catch (e) {
+    console.warn('Terrain probe fell back to sea level');
+  }
+  return groundHeight;
+  // Note: with no terrain provider this is sea level, which is the
+  // correct ground for the flat grid fallback.
+}
+
+function settleSpawn() {
+  var attempts = 0;
+  var timer = setInterval(function() {
+    attempts++;
+    if (!simState || !scene) { clearInterval(timer); return; }
+    var carto = new Cesium.Cartographic(simState.lon, simState.lat, 0);
+    var h;
+    if (scene.sampleHeightSupported) h = scene.sampleHeight(carto);
+    if (h === undefined && scene.globe && scene.globe.show) h = scene.globe.getHeight(carto);
+    if (h !== undefined && isFinite(h)) {
+      simState.ground = h;
+      if (simState.spec.kind === 'drive') simState.height = h + simState.spec.ride;
+      else if (simState.spec.kind === 'train') simState.height = h + currentTrackHeight();
+    }
+    if (attempts >= 8) clearInterval(timer);
+  }, 350);
+}
+
+/* ────────────────────────────────────────────────────────────
+   Geometry helpers
+   ──────────────────────────────────────────────────────────── */
+var EARTH_R = 6378137;
+
+function getMeters(lon1, lat1, lon2, lat2) {
+  var dLat = lat2 - lat1;
+  var dLon = (lon2 - lon1) * Math.cos((lat1 + lat2) / 2);
+  return Math.sqrt(dLat * dLat + dLon * dLon) * EARTH_R;
+}
+
+function metersDeg(latA, lonA, latB, lonB) {
+  return getMeters(
+    Cesium.Math.toRadians(lonA), Cesium.Math.toRadians(latA),
+    Cesium.Math.toRadians(lonB), Cesium.Math.toRadians(latB)
+  );
+}
+
+function angleDiff(from, to) {
+  var d = (to - from) % (2 * Math.PI);
+  if (d > Math.PI) d -= 2 * Math.PI;
+  if (d < -Math.PI) d += 2 * Math.PI;
+  return d;
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+/* ────────────────────────────────────────────────────────────
+   Rail network geometry
+   ──────────────────────────────────────────────────────────── */
+var trainTrackState = { lineIndex: 0, segIndex: 0, segT: 0 };
+var lastRoadVehicle = 'sedan';
+
+function railNodes(lineIdx) { return SUBWAY_LINES[lineIdx].nodes; }
+
+function segMeters(lineIdx, segIdx) {
+  var n = railNodes(lineIdx);
+  var a = n[segIdx], b = n[segIdx + 1];
+  return Math.max(1, metersDeg(a.lat, a.lon, b.lat, b.lon));
+}
+
+function railPoint(lineIdx, segIdx, t) {
+  var n = railNodes(lineIdx);
+  var a = n[segIdx], b = n[segIdx + 1];
+  return {
+    lineIdx: lineIdx,
+    segIdx: segIdx,
+    t: t,
+    lat: a.lat + (b.lat - a.lat) * t,
+    lon: a.lon + (b.lon - a.lon) * t,
+    h: a.h + (b.h - a.h) * t,
+    heading: Math.atan2(b.lon - a.lon, b.lat - a.lat),
+    from: a,
+    to: b
+  };
+}
+
+function currentTrackHeight() {
+  if (!SUBWAY_LINES[trainTrackState.lineIndex]) return 4.2;
+  return railPoint(trainTrackState.lineIndex, trainTrackState.segIndex, trainTrackState.segT).h;
+}
+
+function railWalk(lineIdx, segIdx, t, meters) {
+  var n = railNodes(lineIdx);
+  var si = segIdx, tt = t, remaining = meters, guard = 0;
+  while (guard++ < 300) {
+    var segLen = segMeters(lineIdx, si);
+    if (remaining >= 0) {
+      var avail = (1 - tt) * segLen;
+      if (remaining <= avail) { tt += remaining / segLen; break; }
+      remaining -= avail;
+      if (si >= n.length - 2) { tt = 1; break; }
+      si++; tt = 0;
+    } else {
+      var availBack = tt * segLen;
+      if (-remaining <= availBack) { tt += remaining / segLen; break; }
+      remaining += availBack;
+      if (si <= 0) { tt = 0; break; }
+      si--; tt = 1;
+    }
+  }
+  return railPoint(lineIdx, si, Math.max(0, Math.min(1, tt)));
+}
+
+function projectPointToSegment(pLat, pLon, aLat, aLon, bLat, bLon) {
+  var kx = Math.cos(Cesium.Math.toRadians((aLat + bLat) / 2));
+  var dx = (bLon - aLon) * kx;
+  var dy = bLat - aLat;
+  var lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return { lat: aLat, lon: aLon, t: 0 };
+  var t = (((pLon - aLon) * kx) * dx + (pLat - aLat) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return { lat: aLat + t * (bLat - aLat), lon: aLon + t * (bLon - aLon), t: t };
+}
+
+function findNearestRail(latDeg, lonDeg, maxDist) {
+  var best = null;
+  for (var li = 0; li < SUBWAY_LINES.length; li++) {
+    var n = railNodes(li);
+    for (var si = 0; si < n.length - 1; si++) {
+      var proj = projectPointToSegment(latDeg, lonDeg, n[si].lat, n[si].lon, n[si + 1].lat, n[si + 1].lon);
+      var d = metersDeg(latDeg, lonDeg, proj.lat, proj.lon);
+      if (!best || d < best.dist) {
+        var pt = railPoint(li, si, proj.t);
+        pt.dist = d;
+        pt.lineName = SUBWAY_LINES[li].name;
+        best = pt;
+      }
+    }
+  }
+  if (maxDist !== undefined && best && best.dist > maxDist) return null;
+  return best;
+}
+
+// Only snaps if a track is actually nearby. Warping to Tokyo as a train
+// used to yank the player back to Brooklyn.
+function snapToNearestSubwayTrack(maxDist) {
+  var curLat = Cesium.Math.toDegrees(simState.lat);
+  var curLon = Cesium.Math.toDegrees(simState.lon);
+  var best = findNearestRail(curLat, curLon, maxDist);
+  if (!best) return false;
+
+  trainTrackState.lineIndex = best.lineIdx;
+  trainTrackState.segIndex = best.segIdx;
+  trainTrackState.segT = best.t;
+
+  simState.lat = Cesium.Math.toRadians(best.lat);
+  simState.lon = Cesium.Math.toRadians(best.lon);
+  simState.heading = best.heading;
+  simState.height = simState.ground + best.h;
+  return true;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Vehicle rig
+   ──────────────────────────────────────────────────────────── */
+function initVehicleRig(groundH) {
+  var spec = VEHICLES[sel.vehicle];
+  var isAir = spec.kind === 'fly';
+  var isTrain = spec.kind === 'train';
+  if (spec.kind === 'drive') lastRoadVehicle = sel.vehicle;
+
+  simState = {
+    spec: spec,
+    lat: Cesium.Math.toRadians(sel.place.lat),
+    lon: Cesium.Math.toRadians(sel.place.lon),
+    height: isAir ? (groundH + 340) : (groundH + spec.ride),
+    ground: groundH,
+    groundTarget: groundH,
+    heading: Cesium.Math.toRadians(sel.place.heading || 0),
+    pitch: 0,
+    roll: 0,
+    speed: isAir ? 35 : 0,
+    vertical: 0,
+    throttle: isAir ? 0.75 : 0,
+    burn: 100,
+    burnMix: 0,
+    burnLock: 0,
+    burnReady: true
+  };
+
+  createVehicleEntity();
+
+  if (isTrain) {
+    if (!snapToNearestSubwayTrack(4000)) {
+      showToast('No mapped track here — switched to a sedan');
+      sel.vehicle = 'sedan';
+      simState.spec = VEHICLES.sedan;
+      simState.height = groundH + VEHICLES.sedan.ride;
+      createVehicleEntity();
+    } else {
+      simState.speed = 12;
+    }
+  }
+  ensureTrailers();
+
+  if (sel.adventure && sel.adventure.objectives) initAdventure(sel.adventure);
+}
+
+function chassisFor(vehId, spec) {
+  if (spec.kind === 'train') return new Cesium.Cartesian3(3.2, 19.5, 3.4);
+  if (spec.kind === 'fly') {
+    return vehId === 'jet'
+      ? new Cesium.Cartesian3(5.5, 9.5, 1.8)
+      : new Cesium.Cartesian3(4.0, 6.5, 1.7);
+  }
+  return new Cesium.Cartesian3(1.9, 4.3, 0.65);
+}
+
+function createVehicleEntity() {
+  var spec = simState.spec;
+  var dims = chassisFor(sel.vehicle, spec);
+  var matColor = Cesium.Color.fromCssColorString(spec.color);
+
+  if (!vehicleEntity) {
+    vehicleEntity = viewer.entities.add({
+      name: spec.label,
+      box: {
+        dimensions: new Cesium.ConstantProperty(dims),
+        material: new Cesium.ColorMaterialProperty(matColor),
+        outline: true,
+        outlineColor: new Cesium.ConstantProperty(Cesium.Color.WHITE.withAlpha(0.65)),
+        outlineWidth: 1.5
+      }
+    });
+  } else {
+    vehicleEntity.name = spec.label;
+    vehicleEntity.box.dimensions = new Cesium.ConstantProperty(dims);
+    vehicleEntity.box.material = new Cesium.ColorMaterialProperty(matColor);
+  }
+}
+
+function ensureTrailers() {
+  var want = (simState.spec.kind === 'train') ? (simState.spec.cars || 0) : 0;
+  while (trailerEntities.length > want) {
+    viewer.entities.remove(trailerEntities.pop());
+  }
+  while (trailerEntities.length < want) {
+    trailerEntities.push(viewer.entities.add({
+      box: {
+        dimensions: new Cesium.ConstantProperty(new Cesium.Cartesian3(3.2, 19.5, 3.4)),
+        material: new Cesium.ColorMaterialProperty(Cesium.Color.fromCssColorString(simState.spec.color)),
+        outline: true,
+        outlineColor: new Cesium.ConstantProperty(Cesium.Color.WHITE.withAlpha(0.5)),
+        outlineWidth: 1.2
+      }
+    }));
+  }
+}
+
+function changeVehicleInGame(newVehId) {
+  if (!VEHICLES[newVehId] || !simState || transition) return;
+  var newSpec = VEHICLES[newVehId];
+  var wasFlying = simState.spec.kind === 'fly';
+
+  sel.vehicle = newVehId;
+  simState.spec = newSpec;
+  if (newSpec.kind === 'drive') lastRoadVehicle = newVehId;
+
+  if (newSpec.kind === 'train') {
+    if (!snapToNearestSubwayTrack(4000)) {
+      showToast('No mapped track nearby — staying on the road');
+      sel.vehicle = lastRoadVehicle;
+      simState.spec = VEHICLES[lastRoadVehicle];
+      simState.height = simState.ground + simState.spec.ride;
+      $('inGameVehicleSelect').value = sel.vehicle;
+      createVehicleEntity();
+      ensureTrailers();
+      setupTouchPads();
+      return;
+    }
+    simState.speed = 12;
+    simState.pitch = 0; simState.roll = 0; simState.vertical = 0;
+  } else if (!wasFlying && newSpec.kind === 'fly') {
+    simState.height = Math.max(simState.height, simState.ground + 180);
+    simState.speed = Math.max(simState.speed, 45);
+    simState.throttle = 0.75;
+    simState.pitch = 0; simState.roll = 0;
+  } else if (wasFlying && newSpec.kind !== 'fly') {
+    simState.height = simState.ground + newSpec.ride;
+    simState.speed = Math.min(simState.speed, newSpec.topSpeed * 0.4);
+    simState.pitch = 0; simState.roll = 0; simState.vertical = 0;
+    resetFov();
+  } else {
+    simState.height = simState.ground + newSpec.ride;
+  }
+
+  if (newSpec.kind === 'fly') { simState.burn = 100; simState.burnMix = 0; simState.burnLock = 0; simState.burnReady = true; }
+
+  createVehicleEntity();
+  ensureTrailers();
+  setupTouchPads();
+  showToast('Switched to ' + newSpec.label);
+}
+
+async function warpToCity(cityIdx) {
+  var p = CITIES[cityIdx];
+  if (!p || !simState || transition) return;
+  sel.place = p;
+  showToast('Warping to ' + p.name + '…');
+
+  var groundH = await probeTerrainHeight(p.lat, p.lon);
+  simState.lat = Cesium.Math.toRadians(p.lat);
+  simState.lon = Cesium.Math.toRadians(p.lon);
+  simState.heading = Cesium.Math.toRadians(p.heading || 0);
+  simState.ground = groundH;
+  simState.groundTarget = groundH;
+  simState.pitch = 0;
+  simState.roll = 0;
+  simState.vertical = 0;
+
+  if (simState.spec.kind === 'train') {
+    if (!snapToNearestSubwayTrack(4000)) {
+      showToast('No mapped track in ' + p.name + ' — switched to a sedan');
+      sel.vehicle = lastRoadVehicle;
+      simState.spec = VEHICLES[lastRoadVehicle];
+      $('inGameVehicleSelect').value = sel.vehicle;
+      simState.height = groundH + simState.spec.ride;
+      simState.speed = 0;
+      createVehicleEntity();
+      ensureTrailers();
+      setupTouchPads();
+    } else {
+      simState.speed = 12;
+    }
+  } else if (simState.spec.kind === 'fly') {
+    simState.height = groundH + 340;
+    simState.speed = 45;
+    simState.throttle = 0.75;
+  } else {
+    simState.height = groundH + simState.spec.ride;
+    simState.speed = 0;
+  }
+
+  settleSpawn();
+  updateSimRender();
+  updateHUD();
+}
+
+/* ────────────────────────────────────────────────────────────
+   Boarding: drive up to a line, ramp on, take over the train
+   ──────────────────────────────────────────────────────────── */
+var RAIL_BOARD_DIST = 35;
+var boardCandidate = null;
+var transition = null;
+var boardScanTick = 0;
+
+function updateBoardPrompt() {
+  var prompt = $('boardPrompt');
+  if (transition || !simState) { prompt.classList.remove('on'); return; }
+
+  if (simState.spec.kind === 'train') {
+    if (Math.abs(simState.speed) < 1.5) {
+      $('boardText').innerHTML = 'Stopped on <b>' + SUBWAY_LINES[trainTrackState.lineIndex].name + '</b>';
+      $('boardBtn').textContent = 'Leave the train';
+      prompt.classList.add('on');
+    } else {
+      prompt.classList.remove('on');
+    }
+    return;
+  }
+
+  if (simState.spec.kind !== 'drive') { prompt.classList.remove('on'); return; }
+
+  if (boardCandidate) {
+    var elevated = boardCandidate.h > 3;
+    $('boardText').innerHTML = (elevated ? 'Ramp up to the elevated ' : 'Join the ') +
+      '<b>' + boardCandidate.lineName + '</b> at ' + boardCandidate.from.s;
+    $('boardBtn').textContent = 'Board the train';
+    prompt.classList.add('on');
+  } else {
+    prompt.classList.remove('on');
+  }
+}
+
+function scanForRail() {
+  if (!simState || simState.spec.kind !== 'drive') { boardCandidate = null; return; }
+  var cand = findNearestRail(
+    Cesium.Math.toDegrees(simState.lat),
+    Cesium.Math.toDegrees(simState.lon),
+    RAIL_BOARD_DIST
+  );
+  // Deep tunnel sections have no street-level access point.
+  boardCandidate = (cand && cand.h > -6) ? cand : null;
+}
+
+function triggerBoardAction() {
+  if (transition || !simState) return;
+  if (simState.spec.kind === 'train' && Math.abs(simState.speed) < 1.5) beginAlight();
+  else if (simState.spec.kind === 'drive' && boardCandidate) beginBoard(boardCandidate);
+}
+
+function beginBoard(cand) {
+  var reversed = Math.abs(angleDiff(simState.heading, cand.heading)) > Math.PI / 2;
+  var target = {
+    lat: Cesium.Math.toRadians(cand.lat),
+    lon: Cesium.Math.toRadians(cand.lon),
+    height: simState.ground + cand.h,
+    heading: reversed ? cand.heading + Math.PI : cand.heading
+  };
+  var from = {
+    lat: simState.lat, lon: simState.lon,
+    height: simState.height, heading: simState.heading
+  };
+
+  $('boardPrompt').classList.remove('on');
+  transition = {
+    t: 0,
+    dur: cand.h > 3 ? 1.15 : 0.7,
+    from: from,
+    to: target,
+    arc: Math.max(0, cand.h) * 0.35,
+    done: function() {
+      sel.vehicle = 'subway';
+      simState.spec = VEHICLES.subway;
+      trainTrackState.lineIndex = cand.lineIdx;
+      trainTrackState.segIndex = cand.segIdx;
+      trainTrackState.segT = cand.t;
+      simState.speed = reversed ? -8 : 8;
+      simState.pitch = 0; simState.roll = 0;
+      $('inGameVehicleSelect').value = 'subway';
+      createVehicleEntity();
+      ensureTrailers();
+      setupTouchPads();
+      showToast('Now driving the ' + cand.lineName);
+    }
+  };
+}
+
+function beginAlight() {
+  var spec = VEHICLES[lastRoadVehicle];
+  var from = { lat: simState.lat, lon: simState.lon, height: simState.height, heading: simState.heading };
+  var target = { lat: simState.lat, lon: simState.lon, height: simState.ground + spec.ride, heading: simState.heading };
+
+  $('boardPrompt').classList.remove('on');
+  transition = {
+    t: 0,
+    dur: 0.7,
+    from: from,
+    to: target,
+    arc: 0,
+    done: function() {
+      sel.vehicle = lastRoadVehicle;
+      simState.spec = spec;
+      simState.speed = 0;
+      $('inGameVehicleSelect').value = lastRoadVehicle;
+      createVehicleEntity();
+      ensureTrailers();
+      setupTouchPads();
+      showToast('Back on the street');
+    }
+  };
+}
+
+function stepTransition(dt) {
+  transition.t += dt;
+  var k = Math.min(1, transition.t / transition.dur);
+  var e = k * k * (3 - 2 * k);
+  var f = transition.from, t = transition.to;
+
+  simState.lat = lerp(f.lat, t.lat, e);
+  simState.lon = lerp(f.lon, t.lon, e);
+  simState.height = lerp(f.height, t.height, e) + Math.sin(Math.PI * k) * transition.arc;
+  simState.heading = f.heading + angleDiff(f.heading, t.heading) * e;
+  simState.speed = lerp(simState.speed, 0, Math.min(1, dt * 3));
+
+  if (k >= 1) {
+    var fn = transition.done;
+    transition = null;
+    fn();
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+   Adventures
+   ──────────────────────────────────────────────────────────── */
+var activeAdv = null;
+var advIndex = 0;
+var advMarkers = [];
+var lingerTimer = 0;
+
+function initAdventure(adv) {
+  activeAdv = adv;
+  advIndex = 0;
+  lingerTimer = 0;
+  advMarkers.forEach(function(m) { viewer.entities.remove(m); });
+  advMarkers = [];
+  if (!adv.objectives) return;
+
+  adv.objectives.forEach(function(o, i) {
+    if (o.lat === undefined) { advMarkers.push(null); return; }
+    var m = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(o.lon, o.lat, 0),
+      cylinder: {
+        length: 400,
+        topRadius: o.radius || 60,
+        bottomRadius: o.radius || 60,
+        material: Cesium.Color.fromCssColorString('#e53982').withAlpha(0.28),
+        outline: true,
+        outlineColor: Cesium.Color.fromCssColorString('#e53982').withAlpha(0.85),
+        heightReference: Cesium.HeightReference.RELATIVE_TO_GROUND
+      },
+      label: {
+        text: o.label,
+        font: '600 15px -apple-system, sans-serif',
+        fillColor: Cesium.Color.WHITE,
+        showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#0a131a').withAlpha(0.85),
+        pixelOffset: new Cesium.Cartesian2(0, -24),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY
+      },
+      show: i === 0
+    });
+    advMarkers.push(m);
+  });
+
+  $('objectiveBox').style.display = 'block';
+  updateAdvUI();
+}
+
+function updateAdvUI() {
+  if (!activeAdv || !activeAdv.objectives) return;
+  var total = activeAdv.objectives.length;
+  if (advIndex >= total) {
+    $('objTitle').textContent = activeAdv.name + ' · COMPLETE';
+    $('objDesc').textContent = 'All objectives finished. Free roam active.';
+    advMarkers.forEach(function(m) { if (m) m.show = false; });
+    return;
+  }
+  $('objTitle').textContent = activeAdv.name + ' · ' + (advIndex + 1) + ' of ' + total;
+  $('objDesc').textContent = activeAdv.objectives[advIndex].label;
+  advMarkers.forEach(function(m, i) { if (m) m.show = (i === advIndex); });
+}
+
+function checkAdventure(dt) {
+  if (!activeAdv || !activeAdv.objectives || advIndex >= activeAdv.objectives.length) return;
+  var o = activeAdv.objectives[advIndex];
+  var done = false;
+  var d;
+
+  if (o.type === 'waypoint') {
+    d = getMeters(simState.lon, simState.lat, Cesium.Math.toRadians(o.lon), Cesium.Math.toRadians(o.lat));
+    done = d < (o.radius || 60);
+  } else if (o.type === 'linger') {
+    d = getMeters(simState.lon, simState.lat, Cesium.Math.toRadians(o.lon), Cesium.Math.toRadians(o.lat));
+    if (d < (o.radius || 60)) {
+      lingerTimer += dt;
+      $('objDesc').textContent = o.label + ' — ' + Math.max(0, o.seconds - lingerTimer).toFixed(1) + 's';
+      if (lingerTimer >= o.seconds) done = true;
+    } else {
+      lingerTimer = 0;
+      $('objDesc').textContent = o.label;
+    }
+  } else if (o.type === 'altitude') {
+    var agl = Math.max(0, simState.height - simState.ground);
+    $('objDesc').textContent = o.label + ' — ' + Math.round(agl) + ' / ' + o.above + ' m';
+    done = agl >= o.above;
+  } else if (o.type === 'speed') {
+    var kmh = Math.abs(simState.speed) * 3.6;
+    $('objDesc').textContent = o.label + ' — ' + Math.round(kmh) + ' / ' + o.above + ' km/h';
+    done = kmh >= o.above;
+  } else if (o.type === 'board') {
+    done = simState.spec.kind === 'train';
+  }
+
+  if (done) {
+    showToast('Objective complete: ' + o.label);
+    advIndex++;
+    lingerTimer = 0;
+    updateAdvUI();
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+   Input
+   ──────────────────────────────────────────────────────────── */
+var keyMap = Object.create(null);
+var touchInput = {
+  steer: 0, throttle: 0, elevator: 0, yaw: 0, collective: 0,
+  brake: false, drift: false, burn: false, throtUp: false, throtDown: false
+};
+var CAM_VIEWS = [
+  { id: 'chase', label: 'Chase (Rear)', dist: 13.5, up: 4.2, pitch: -0.20 },
+  { id: 'cockpit', label: 'Bumper / Hood', dist: -1.2, up: 1.3, pitch: -0.05 },
+  { id: 'wide', label: 'Wide Aerial', dist: 32, up: 13, pitch: -0.34 }
+];
+var curCamIdx = 0;
+
+function initInputControls() {
+  window.addEventListener('keydown', function(e) {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].indexOf(e.code) !== -1) e.preventDefault();
+    keyMap[e.code] = true;
+    if (e.code === 'KeyC') cycleCam();
+    if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
+    if (e.code === 'KeyE') triggerBoardAction();
+    if (e.code === 'KeyT') cycleRailLine();
+  });
+  window.addEventListener('keyup', function(e) { keyMap[e.code] = false; });
+  window.addEventListener('blur', function() { keyMap = Object.create(null); });
+
+  $('camSwitchBtn').onclick = cycleCam;
+  $('pauseBtn').onclick = function() { togglePause(true); };
+  $('resumeBtn').onclick = function() { togglePause(false); };
+  $('exitBtn').onclick = function() { location.reload(); };
+  $('boardBtn').onclick = triggerBoardAction;
+  $('netBannerClose').onclick = function() { $('netBanner').classList.remove('on'); };
+
+  if (('ontouchstart' in window) || navigator.maxTouchPoints > 0) {
+    $('touchControls').classList.add('on');
+    setupTouchStick();
+    setupTouchPads();
+  }
+}
+
+function cycleCam() {
+  curCamIdx = (curCamIdx + 1) % CAM_VIEWS.length;
+  $('camSwitchBtn').textContent = 'Cam: ' + CAM_VIEWS[curCamIdx].label;
+  showToast('Camera: ' + CAM_VIEWS[curCamIdx].label);
+}
+
+function cycleRailLine() {
+  if (!simState || simState.spec.kind !== 'train') return;
+  var start = trainTrackState.lineIndex;
+  for (var i = 1; i <= SUBWAY_LINES.length; i++) {
+    var li = (start + i) % SUBWAY_LINES.length;
+    var latD = Cesium.Math.toDegrees(simState.lat);
+    var lonD = Cesium.Math.toDegrees(simState.lon);
+    var best = null;
+    var n = railNodes(li);
+    for (var si = 0; si < n.length - 1; si++) {
+      var proj = projectPointToSegment(latD, lonD, n[si].lat, n[si].lon, n[si + 1].lat, n[si + 1].lon);
+      var d = metersDeg(latD, lonD, proj.lat, proj.lon);
+      if (!best || d < best.d) best = { d: d, si: si, t: proj.t };
+    }
+    if (best && best.d < 400) {
+      trainTrackState.lineIndex = li;
+      trainTrackState.segIndex = best.si;
+      trainTrackState.segT = best.t;
+      var pt = railPoint(li, best.si, best.t);
+      simState.lat = Cesium.Math.toRadians(pt.lat);
+      simState.lon = Cesium.Math.toRadians(pt.lon);
+      simState.heading = pt.heading;
+      showToast('Switched to ' + SUBWAY_LINES[li].name);
+      return;
+    }
+  }
+  showToast('No interchange here');
+}
+
+function setupTouchStick() {
+  var stick = $('stick');
+  var nub = $('stickNub');
+  var id = null, cx = 0, cy = 0;
+  var maxR = 48;
+
+  stick.addEventListener('pointerdown', function(e) {
+    id = e.pointerId;
+    var r = stick.getBoundingClientRect();
+    cx = r.left + r.width / 2;
+    cy = r.top + r.height / 2;
+    stick.setPointerCapture(id);
+  });
+
+  stick.addEventListener('pointermove', function(e) {
+    if (e.pointerId !== id || !simState) return;
+    var dx = e.clientX - cx, dy = e.clientY - cy;
+    var dist = Math.hypot(dx, dy) || 1;
+    var scale = Math.min(dist, maxR) / dist;
+    dx *= scale; dy *= scale;
+    nub.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
+
+    touchInput.steer = dx / maxR;
+    if (simState.spec.kind === 'fly') touchInput.elevator = dy / maxR;
+    else touchInput.throttle = -dy / maxR;
+  });
+
+  var resetStick = function(e) {
+    if (e.pointerId !== id) return;
+    id = null;
+    nub.style.transform = 'translate(0,0)';
+    touchInput.steer = 0;
+    touchInput.throttle = 0;
+    touchInput.elevator = 0;
+  };
+  stick.addEventListener('pointerup', resetStick);
+  stick.addEventListener('pointercancel', resetStick);
+}
+
+function setupTouchPads() {
+  if (!simState) return;
+  var kind = simState.spec.kind;
+  var pads = $('padContainer');
+
+  if (kind === 'drive') {
+    pads.innerHTML =
+      '<div class="pad-btn" data-act="gas">Gas ⇧</div>' +
+      '<div class="pad-btn" data-act="brake">Brake</div>' +
+      '<div class="pad-btn" data-act="rev">Rev ⇩</div>' +
+      '<div class="pad-btn" data-act="drift">Drift</div>';
+  } else if (kind === 'train') {
+    pads.innerHTML =
+      '<div class="pad-btn" data-act="gas">Throt ⇧</div>' +
+      '<div class="pad-btn" data-act="brake">Brake</div>' +
+      '<div class="pad-btn" data-act="rev">Rev ⇩</div>' +
+      '<div class="pad-btn" data-act="switch">Switch ⇄</div>';
+  } else {
+    var burnPad = simState.spec.afterburner
+      ? '<div class="pad-btn wide burn" data-act="burn">🔥 Afterburner</div>' : '';
+    pads.innerHTML =
+      '<div class="pad-btn" data-act="climb">Climb ⇡</div>' +
+      '<div class="pad-btn" data-act="descend">Descend ⇣</div>' +
+      '<div class="pad-btn" data-act="rudL">Rud ⇦</div>' +
+      '<div class="pad-btn" data-act="rudR">Rud ⇨</div>' +
+      '<div class="pad-btn" data-act="thrDown">Thr −</div>' +
+      '<div class="pad-btn" data-act="thrUp">Thr +</div>' +
+      burnPad;
+  }
+
+  Array.prototype.forEach.call(pads.querySelectorAll('.pad-btn'), function(btn) {
+    var act = btn.dataset.act;
+    var setOn = function(on) {
+      btn.classList.toggle('active', on);
+      if (act === 'gas') touchInput.throttle = on ? 1 : 0;
+      if (act === 'rev') touchInput.throttle = on ? -1 : 0;
+      if (act === 'brake') touchInput.brake = on;
+      if (act === 'drift') touchInput.drift = on;
+      if (act === 'burn') touchInput.burn = on;
+      if (act === 'thrUp') touchInput.throtUp = on;
+      if (act === 'thrDown') touchInput.throtDown = on;
+      if (act === 'switch' && on) cycleRailLine();
+      if (act === 'climb') touchInput.collective = on ? 1 : 0;
+      if (act === 'descend') touchInput.collective = on ? -1 : 0;
+      if (act === 'rudL') touchInput.yaw = on ? -1 : 0;
+      if (act === 'rudR') touchInput.yaw = on ? 1 : 0;
+    };
+    btn.onpointerdown = function(e) { e.preventDefault(); setOn(true); };
+    btn.onpointerup = function() { setOn(false); };
+    btn.onpointercancel = function() { setOn(false); };
+    btn.onpointerleave = function() { setOn(false); };
+  });
+}
+
+function readInput() {
+  var kSteer = ((keyMap.KeyD || keyMap.ArrowRight) ? 1 : 0) - ((keyMap.KeyA || keyMap.ArrowLeft) ? 1 : 0);
+  var steer = kSteer !== 0 ? kSteer : touchInput.steer;
+
+  if (simState.spec.kind !== 'fly') {
+    var kThrot = ((keyMap.KeyW || keyMap.ArrowUp) ? 1 : 0) - ((keyMap.KeyS || keyMap.ArrowDown) ? 1 : 0);
+    return {
+      steer: steer,
+      throttle: kThrot !== 0 ? kThrot : touchInput.throttle,
+      brake: !!keyMap.Space || touchInput.brake,
+      drift: !!keyMap.ShiftLeft || !!keyMap.ShiftRight || touchInput.drift,
+      elevator: 0, yaw: 0, collective: 0, throtDelta: 0, burn: false
+    };
+  }
+
+  var kElev = ((keyMap.KeyS || keyMap.ArrowDown) ? 1 : 0) - ((keyMap.KeyW || keyMap.ArrowUp) ? 1 : 0);
+  var kYawAlt = (keyMap.BracketRight ? 1 : 0) - (keyMap.BracketLeft ? 1 : 0);
+  var kYaw = (keyMap.KeyL ? 1 : 0) - (keyMap.KeyJ ? 1 : 0);
+  var yawKeys = kYaw !== 0 ? kYaw : kYawAlt;
+  var kCol = (keyMap.Space ? 1 : 0) - ((keyMap.ShiftLeft || keyMap.ShiftRight) ? 1 : 0);
+  var kThr = ((keyMap.KeyR ? 1 : 0) - (keyMap.KeyF ? 1 : 0));
+  var tThr = (touchInput.throtUp ? 1 : 0) - (touchInput.throtDown ? 1 : 0);
+
+  return {
+    steer: steer,
+    elevator: kElev !== 0 ? kElev : touchInput.elevator,
+    yaw: yawKeys !== 0 ? yawKeys : touchInput.yaw,
+    collective: kCol !== 0 ? kCol : touchInput.collective,
+    throtDelta: kThr !== 0 ? kThr : tThr,
+    burn: !!keyMap.KeyX || touchInput.burn,
+    throttle: 0, brake: false, drift: false
+  };
+}
+
+/* ────────────────────────────────────────────────────────────
+   Main loop
+   ──────────────────────────────────────────────────────────── */
+var frameTick = 0;
+
+function gameLoop(now) {
+  // Scheduled first so a thrown error costs one frame, not the whole session.
+  requestAnimationFrame(gameLoop);
+
+  var dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+  if (isPaused || !simState) return;
+  frameTick++;
+
+  try {
+    if (transition) {
+      stepTransition(dt);
+      updateSimRender();
+      updateHUD();
+      return;
+    }
+
+    var input = readInput();
+    var v = simState.spec;
+
+    if (v.kind === 'train') stepTrain(input, dt);
+    else if (v.kind === 'drive') stepDrive(input, dt);
+    else stepFlight(input, dt);
+
+    if (frameTick % 6 === 0) { scanForRail(); updateBoardPrompt(); }
+    if (frameTick % 30 === 0) updateTileDetail();
+
+    updateSimRender();
+    checkAdventure(dt);
+    updateHUD();
+  } catch (err) {
+    console.error('Frame error:', err);
+  }
+}
+
+function stepTrain(input, dt) {
+  var v = simState.spec;
+  if (input.throttle > 0) simState.speed += v.accel * input.throttle * dt;
+  else if (input.throttle < 0) simState.speed += v.accel * 0.75 * input.throttle * dt;
+  if (input.brake) simState.speed -= Math.sign(simState.speed) * v.brake * dt;
+  simState.speed -= simState.speed * 0.18 * dt;
+  simState.speed = Math.max(-v.topSpeed * 0.45, Math.min(v.topSpeed, simState.speed));
+  if (Math.abs(simState.speed) < 0.12 && !input.throttle) simState.speed = 0;
+
+  var line = railNodes(trainTrackState.lineIndex);
+  var stepM = simState.speed * dt;
+  trainTrackState.segT += stepM / segMeters(trainTrackState.lineIndex, trainTrackState.segIndex);
+
+  var guard = 0;
+  while (trainTrackState.segT > 1 && guard++ < 50) {
+    if (trainTrackState.segIndex < line.length - 2) {
+      trainTrackState.segT -= 1;
+      trainTrackState.segIndex++;
+    } else {
+      trainTrackState.segT = 1;
+      simState.speed = 0;
+      showToast('End of the line');
+      break;
+    }
+  }
+  guard = 0;
+  while (trainTrackState.segT < 0 && guard++ < 50) {
+    if (trainTrackState.segIndex > 0) {
+      trainTrackState.segT += 1;
+      trainTrackState.segIndex--;
+    } else {
+      trainTrackState.segT = 0;
+      simState.speed = 0;
+      showToast('End of the line');
+      break;
+    }
+  }
+
+  var pt = railPoint(trainTrackState.lineIndex, trainTrackState.segIndex, trainTrackState.segT);
+  simState.lat = Cesium.Math.toRadians(pt.lat);
+  simState.lon = Cesium.Math.toRadians(pt.lon);
+
+  var targetHdg = pt.heading + (simState.speed < 0 ? Math.PI : 0);
+  simState.heading += angleDiff(simState.heading, targetHdg) * Math.min(1, 8 * dt);
+
+  sampleLiveGround(simState, dt);
+  simState.height = simState.ground + pt.h;
+  simState.roll = 0;
+
+  // Pitch follows the grade so viaduct climbs read correctly.
+  var ahead = railWalk(trainTrackState.lineIndex, trainTrackState.segIndex, trainTrackState.segT, 40);
+  var rise = ahead.h - pt.h;
+  var run = Math.max(1, metersDeg(pt.lat, pt.lon, ahead.lat, ahead.lon));
+  simState.pitch += (Math.atan2(rise, run) - simState.pitch) * Math.min(1, 4 * dt);
+
+  updateTunnelVeil(pt.h);
+}
+
+function stepDrive(input, dt) {
+  var v = simState.spec;
+  if (input.throttle > 0) simState.speed += v.accel * input.throttle * dt;
+  else if (input.throttle < 0) simState.speed += v.accel * 0.7 * input.throttle * dt;
+  if (input.brake) simState.speed -= Math.sign(simState.speed) * v.brake * dt;
+  simState.speed -= simState.speed * 0.22 * dt;
+  simState.speed = Math.max(-v.topSpeed * 0.4, Math.min(v.topSpeed, simState.speed));
+  if (Math.abs(simState.speed) < 0.15 && !input.throttle) simState.speed = 0;
+
+  var grip = Math.min(1, Math.abs(simState.speed) / 6);
+  var dir = simState.speed < 0 ? -1 : 1;
+  var driftMul = input.drift ? 1.85 : 1.0;
+  simState.heading += input.steer * v.steer * grip * dir * driftMul * dt;
+  simState.heading = ((simState.heading % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+  var dDist = simState.speed * dt;
+  simState.lat += (dDist * Math.cos(simState.heading)) / EARTH_R;
+  simState.lon += (dDist * Math.sin(simState.heading)) / (EARTH_R * Math.max(0.05, Math.cos(simState.lat)));
+
+  sampleLiveGround(simState, dt);
+  simState.height = simState.ground + v.ride;
+  simState.roll += (-input.steer * grip * 0.18 - simState.roll) * 6 * dt;
+  simState.pitch += (0 - simState.pitch) * 5 * dt;
+  updateTunnelVeil(1);
+}
+
+function stepFlight(input, dt) {
+  var v = simState.spec;
+  var ab = v.afterburner;
+
+  simState.throttle = Math.max(0.05, Math.min(1, simState.throttle + input.throtDelta * 0.6 * dt));
+
+  // Once it runs dry the burner will not relight until it has recovered
+  // past the relight threshold, so holding the key can't cheat the limit.
+  if (ab && !simState.burnReady && simState.burn >= ab.relight) simState.burnReady = true;
+
+  var canBurn = ab && input.burn && simState.throttle >= ab.minThrottle &&
+                simState.burn > 0 && simState.burnLock <= 0 && simState.burnReady;
+
+  if (canBurn) {
+    simState.burn = Math.max(0, simState.burn - ab.drain * dt);
+    if (simState.burn <= 0) {
+      simState.burnLock = 2.0;
+      simState.burnReady = false;
+      showToast('Burner dry — cooling down');
+    }
+    simState.burnMix = Math.min(1, simState.burnMix + dt * 2.6);
+  } else {
+    if (ab) simState.burn = Math.min(100, simState.burn + ab.regen * dt);
+    if (simState.burnLock > 0) simState.burnLock = Math.max(0, simState.burnLock - dt);
+    simState.burnMix = Math.max(0, simState.burnMix - dt * 1.7);
+  }
+
+  var boost = ab ? (1 + (ab.mult - 1) * simState.burnMix) : 1;
+  var targetSpeed = v.topSpeed * simState.throttle * boost;
+  var rate = 0.28 + simState.burnMix * 0.6;
+  simState.speed += (targetSpeed - simState.speed) * rate * dt;
+
+  simState.heading += input.yaw * 0.9 * dt + simState.roll * 0.6 * dt;
+  simState.heading = ((simState.heading % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+  // Control authority tightens at speed, so the jet gets heavy on the burner.
+  var authority = 1 / (1 + simState.burnMix * 0.55);
+  simState.roll += (input.steer * 0.95 * authority - simState.roll) * 3 * dt;
+  simState.pitch += (input.elevator * 0.55 * authority - simState.pitch) * 3 * dt;
+  if (simState.burnMix > 0.05) {
+    simState.roll += (Math.random() - 0.5) * 0.016 * simState.burnMix;
+    simState.pitch += (Math.random() - 0.5) * 0.010 * simState.burnMix;
+  }
+
+  simState.vertical = Math.sin(simState.pitch) * simState.speed + input.collective * v.climb;
+  simState.height += simState.vertical * dt;
+
+  var fwd = Math.cos(simState.pitch) * simState.speed * dt;
+  simState.lat += (fwd * Math.cos(simState.heading)) / EARTH_R;
+  simState.lon += (fwd * Math.sin(simState.heading)) / (EARTH_R * Math.max(0.05, Math.cos(simState.lat)));
+
+  sampleLiveGround(simState, dt);
+  if (simState.height < simState.ground + v.ride) {
+    simState.height = simState.ground + v.ride;
+    simState.vertical = 0;
+  }
+
+  applyBurnerCamera();
+  updateTunnelVeil(1);
+}
+
+function applyBurnerCamera() {
+  if (!scene) return;
+  var mix = simState.burnMix || 0;
+  if (scene.camera.frustum.fov !== undefined) {
+    scene.camera.frustum.fov = Cesium.Math.toRadians(BASE_FOV + mix * 18);
+  }
+  scene.fog.density = 0.00012 + mix * 0.00011;
+}
+
+function resetFov() {
+  if (!scene) return;
+  if (scene.camera.frustum.fov !== undefined) {
+    scene.camera.frustum.fov = Cesium.Math.toRadians(BASE_FOV);
+  }
+  scene.fog.density = 0.00012;
+}
+
+// Loosen tile detail at speed so streaming keeps up at Mach numbers.
+function updateTileDetail() {
+  var kmh = Math.abs(simState.speed) * 3.6;
+  var sse = kmh > 600 ? 40 : (kmh > 300 ? 26 : 16);
+  if (photoTileset && photoTileset.maximumScreenSpaceError !== sse) photoTileset.maximumScreenSpaceError = sse;
+  if (osmTileset) {
+    var osse = kmh > 300 ? 20 : 8;
+    if (osmTileset.maximumScreenSpaceError !== osse) osmTileset.maximumScreenSpaceError = osse;
+  }
+}
+
+function updateTunnelVeil(trackH) {
+  var veil = $('tunnelVeil');
+  var tag = $('tunnelTag');
+  if (trackH < -1) {
+    var op = Math.min(0.96, (-trackH) / 12);
+    veil.style.opacity = op;
+    tag.style.opacity = op > 0.4 ? 1 : 0;
+  } else {
+    veil.style.opacity = 0;
+    tag.style.opacity = 0;
+  }
+}
+
+/* Ground sampling is the most expensive per-frame call, so sample on a
+   cadence and smooth toward the result every frame. */
+var sampleCarto = new Cesium.Cartographic();
+function sampleLiveGround(state, dt) {
+  if (!scene) return;
+  if (frameTick % 3 === 0) {
+    sampleCarto.longitude = state.lon;
+    sampleCarto.latitude = state.lat;
+    sampleCarto.height = 0;
+
+    var rawH;
+    if (scene.sampleHeightSupported) {
+      var sh = scene.sampleHeight(sampleCarto);
+      if (sh !== undefined && isFinite(sh)) rawH = sh;
+    }
+    if (rawH === undefined && scene.globe && scene.globe.show) {
+      var gh = scene.globe.getHeight(sampleCarto);
+      if (gh !== undefined && isFinite(gh)) rawH = gh;
+    }
+    if (rawH !== undefined && isFinite(rawH)) state.groundTarget = rawH;
+  }
+  state.ground += (state.groundTarget - state.ground) * Math.min(1, 10 * dt);
+}
+
+/* ────────────────────────────────────────────────────────────
+   Render
+   ──────────────────────────────────────────────────────────── */
+function updateSimRender() {
+  var pos = Cesium.Cartesian3.fromRadians(simState.lon, simState.lat, simState.height);
+  vehicleEntity.position = pos;
+  var hpr = new Cesium.HeadingPitchRoll(simState.heading - Math.PI / 2, simState.pitch, simState.roll);
+  vehicleEntity.orientation = Cesium.Transforms.headingPitchRollQuaternion(pos, hpr);
+  vehicleEntity.show = (curCamIdx !== 1);
+
+  if (simState.spec.kind === 'train' && trailerEntities.length) {
+    // Trailing cars follow the track itself, so they stay on the rails
+    // through curves instead of cutting the corner.
+    for (var i = 0; i < trailerEntities.length; i++) {
+      var back = railWalk(
+        trainTrackState.lineIndex, trainTrackState.segIndex, trainTrackState.segT,
+        -((i + 1) * 20.5) * (simState.speed < 0 ? -1 : 1)
+      );
+      var tPos = Cesium.Cartesian3.fromRadians(
+        Cesium.Math.toRadians(back.lon),
+        Cesium.Math.toRadians(back.lat),
+        simState.ground + back.h
+      );
+      var tHdg = back.heading + (simState.speed < 0 ? Math.PI : 0);
+      trailerEntities[i].position = tPos;
+      trailerEntities[i].orientation = Cesium.Transforms.headingPitchRollQuaternion(
+        tPos, new Cesium.HeadingPitchRoll(tHdg - Math.PI / 2, simState.pitch, 0)
+      );
+      trailerEntities[i].show = true;
+    }
+  }
+
+  var cam = CAM_VIEWS[curCamIdx];
+  var enuMat = Cesium.Transforms.eastNorthUpToFixedFrame(pos);
+  var localOffset = new Cesium.Cartesian3(
+    -Math.sin(simState.heading) * cam.dist,
+    -Math.cos(simState.heading) * cam.dist,
+    cam.up
+  );
+  var eyePos = Cesium.Matrix4.multiplyByPoint(enuMat, localOffset, new Cesium.Cartesian3());
+
+  scene.camera.setView({
+    destination: eyePos,
+    orientation: {
+      heading: simState.heading,
+      pitch: cam.pitch,
+      roll: curCamIdx === 1 ? simState.roll * 0.7 : simState.roll * 0.2
+    }
+  });
+}
+
+function updateHUD() {
+  var kmh = Math.abs(simState.speed) * 3.6;
+  $('speedVal').textContent = Math.round(kmh);
+  $('latVal').textContent = Cesium.Math.toDegrees(simState.lat).toFixed(4);
+  $('lonVal').textContent = Cesium.Math.toDegrees(simState.lon).toFixed(4);
+  $('altVal').textContent = Math.round(Math.max(0, simState.height - simState.ground));
+
+  var isFly = simState.spec.kind === 'fly';
+  var isTrain = simState.spec.kind === 'train';
+
+  $('flyStrip').style.display = isFly ? 'block' : 'none';
+  $('machStat').style.display = (isFly && simState.spec.afterburner) ? 'block' : 'none';
+  $('railPlate').style.display = isTrain ? 'block' : 'none';
+
+  if (isFly) {
+    $('throtVal').textContent = Math.round(simState.throttle * 100);
+    $('throtMeter').firstElementChild.style.width = (simState.throttle * 100) + '%';
+    if (simState.spec.afterburner) {
+      $('burnMeter').firstElementChild.style.width = simState.burn + '%';
+      var cooling = simState.burnLock > 0 || !simState.burnReady;
+      $('burnMeter').classList.toggle('dry', cooling);
+      $('burnLabel').textContent = cooling ? 'Burner cooling' :
+        (simState.burnMix > 0.1 ? 'Burner lit' : 'Burner');
+      $('machStat').textContent = 'M ' + (Math.abs(simState.speed) / 343).toFixed(2);
+    } else {
+      $('burnMeter').firstElementChild.style.width = '0%';
+      $('burnLabel').textContent = 'No burner';
+    }
+  }
+
+  if (isTrain) {
+    var line = SUBWAY_LINES[trainTrackState.lineIndex];
+    var nodes = line.nodes;
+    var nextNode = simState.speed < 0
+      ? nodes[trainTrackState.segIndex]
+      : nodes[Math.min(nodes.length - 1, trainTrackState.segIndex + 1)];
+    var pt = railPoint(trainTrackState.lineIndex, trainTrackState.segIndex, trainTrackState.segT);
+    $('railLine').textContent = line.name;
+    $('railNext').textContent = 'Next: ' + nextNode.s + '  ·  ' +
+      (pt.h < -1 ? 'tunnel' : (pt.h > 3 ? 'elevated ' + Math.round(pt.h) + 'm' : 'surface'));
+  }
+}
+
+var toastTimer;
+function showToast(txt) {
+  var t = $('toast');
+  t.textContent = txt;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function() { t.classList.remove('show'); }, 1800);
+}
+
+function togglePause(force) {
+  isPaused = force === undefined ? !isPaused : force;
+  $('pauseMenu').classList.toggle('on', isPaused);
+  if (!isPaused) { lastTime = performance.now(); return; }
+
+  var kind = simState ? simState.spec.kind : 'drive';
+  var guide;
+  if (kind === 'drive') {
+    guide = 'W A S D / arrows — drive and steer<br>' +
+            'Space — brake &nbsp;|&nbsp; Shift — drift<br>' +
+            'E — board a rail line when prompted<br>' +
+            'C — camera &nbsp;|&nbsp; P — resume';
+  } else if (kind === 'train') {
+    guide = 'W / S / arrows — accelerate and slow<br>' +
+            'Space — train brake &nbsp;|&nbsp; T — switch line<br>' +
+            'E — leave the train when stopped<br>' +
+            'C — camera &nbsp;|&nbsp; P — resume';
+  } else {
+    guide = 'W S — pitch &nbsp;|&nbsp; A D — roll &nbsp;|&nbsp; J L — rudder<br>' +
+            'R / F — throttle up and down<br>' +
+            'Space / Shift — climb and descend<br>' +
+            (simState && simState.spec.afterburner ? 'X — hold for afterburner<br>' : '') +
+            'C — camera &nbsp;|&nbsp; P — resume';
+  }
+  $('controlGuide').innerHTML = guide;
+  var layers = [];
+  if (sceneStatus.photoreal) layers.push('photorealistic 3D tiles');
+  if (sceneStatus.imagery) layers.push('satellite imagery');
+  if (sceneStatus.terrain) layers.push('terrain');
+  if (sceneStatus.buildings) layers.push('OSM buildings');
+  $('pauseNote').textContent = layers.length
+    ? 'Active: ' + layers.join(', ') + '.'
+    : 'No map tiles loaded \u2014 running on the local grid.';
+}
+
+/* ────────────────────────────────────────────────────────────
+   Sign-in
+   ──────────────────────────────────────────────────────────── */
+function checkAuthSession() {
+  try { return sessionStorage.getItem('atlas_authenticated') === 'true'; }
+  catch (e) { return false; }
+}
+
+function setAuthSession(isAuthed) {
+  try {
+    if (isAuthed) sessionStorage.setItem('atlas_authenticated', 'true');
+    else sessionStorage.removeItem('atlas_authenticated');
+  } catch (e) {}
+}
+
+var loginAttempts = 0;
+
+function handleLoginAttempt() {
+  var u = $('loginUser').value.trim().toLowerCase();
+  var p = $('loginPass').value;
+  var err = $('loginErr');
+
+  var userOk = constantTimeEqual(sha256Hex(AUTH_SALT + 'u:' + u), AUTH_USER_HASH);
+  var passOk = constantTimeEqual(sha256Hex(AUTH_SALT + 'p:' + p), AUTH_PASS_HASH);
+
+  if (userOk && passOk) {
+    err.style.display = 'none';
+    loginAttempts = 0;
+    setAuthSession(true);
+    unlockApplication();
+  } else {
+    loginAttempts++;
+    err.textContent = 'That username and password don\u2019t match. Try again.';
+    err.style.display = 'block';
+    $('loginPass').value = '';
+    if (loginAttempts >= 3) {
+      $('loginSubmitBtn').disabled = true;
+      $('loginSubmitBtn').textContent = 'Wait a moment…';
+      setTimeout(function() {
+        $('loginSubmitBtn').disabled = false;
+        $('loginSubmitBtn').textContent = 'Sign in';
+        loginAttempts = 0;
+      }, 2500);
+    } else {
+      $('loginPass').focus();
+    }
+  }
+}
+
+function unlockApplication() {
+  var gate = $('loginGate');
+  if (gate) gate.classList.add('hidden');
+}
+
+function lockApplication() {
+  setAuthSession(false);
+  var gate = $('loginGate');
+  if (gate) {
+    gate.classList.remove('hidden');
+    $('loginPass').value = '';
+    $('loginUser').value = '';
+    $('loginErr').style.display = 'none';
+    $('loginUser').focus();
+  }
+}
+
+function setupAuth() {
+  $('loginSubmitBtn').onclick = handleLoginAttempt;
+  $('loginUser').onkeydown = function(e) { if (e.key === 'Enter') $('loginPass').focus(); };
+  $('loginPass').onkeydown = function(e) { if (e.key === 'Enter') handleLoginAttempt(); };
+  $('logoutBtn').onclick = lockApplication;
+
+  if (checkAuthSession()) unlockApplication();
+  else setTimeout(function() { if ($('loginUser')) $('loginUser').focus(); }, 100);
+}
+
+$('startBtn').onclick = function() { startEngine(); };
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function() { setupAuth(); initMenu(); });
+} else {
+  setupAuth();
+  initMenu();
+}
+
+</script>
+</body>
+</html>
