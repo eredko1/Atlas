@@ -835,6 +835,12 @@ if (window.Cesium) {
     </details>
 
     <details>
+      <summary>Credits &amp; data sources</summary>
+      <p>Road and rail centrelines come from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors, queried live through the Overpass API and licensed under the ODbL. They are what keeps the car on the street and the train on the rails; when Overpass is unreachable the sim falls back to free driving and the built-in station chain.</p>
+      <p>The road car is <a href="https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CarConcept" target="_blank" rel="noopener">Car Concept</a> from the Khronos glTF Sample Assets, &copy; 2021 Khronos Group, licensed <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY 4.0</a>, itself derived from a public-domain model by Unity Fan.</p>
+    </details>
+
+    <details>
       <summary>About the sign-in</summary>
       <p>Any of the accounts in <code>AUTH_ACCOUNTS</code> can sign in — there's an owner login and a shared <strong>guest</strong> login for friends. Credentials are checked as salted SHA-256 digests, so no password is readable in the page source. This keeps it off a casual reader's screen — it isn't real access control, because everything here runs in your browser and a determined person with developer tools can step around it. Anything that must actually be protected needs a server.</p>
     </details>
@@ -874,6 +880,7 @@ if (window.Cesium) {
       <div class="hud-controls">
         <button class="hud-btn" id="camSwitchBtn" type="button">Cam: Chase</button>
         <button class="hud-btn" id="qualityBtn" type="button">Quality: Auto</button>
+        <button class="hud-btn" id="roadBtn" type="button">Roads: Assist</button>
         <button class="hud-btn" id="pauseBtn" type="button">Pause</button>
       </div>
       <div class="hud-plate" id="speedPlate">
@@ -1826,6 +1833,9 @@ async function startEngine() {
     }
 
     updateBoot(95, 'Placing vehicle…');
+    // Kick the street/rail fetch off now so it overlaps the last of the
+    // tile streaming rather than starting when the player first moves.
+    osmFetchAround(sel.place.lat, sel.place.lon);
     var groundHeight = await probeTerrainHeight(sel.place.lat, sel.place.lon);
 
     initVehicleRig(groundHeight);
@@ -1952,6 +1962,286 @@ function lerp(a, b, t) { return a + (b - a) * t; }
 /* ────────────────────────────────────────────────────────────
    Rail network geometry
    ──────────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────
+   Street & rail network (OpenStreetMap via Overpass)
+
+   The photorealistic tileset is a single skin of geometry with no idea what
+   a road is, so `scene.sampleHeight` happily returns the top of a building
+   and the car drives up onto the roof. The cure is actual road centrelines:
+   we pull the ways around the player from Overpass, project them into a
+   local metre frame, and index them in a grid so the nearest-segment query
+   is cheap enough to run every frame.
+
+   Everything here is best-effort. Overpass is a free, rate-limited, third
+   party service; when it is slow, blocked or down, `osmNet.ready` stays
+   false and the sim falls back to the behaviour it had before (plus the
+   climb guard, which needs no network at all).
+   ──────────────────────────────────────────────────────────── */
+var OSM_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter'
+];
+
+// Ways we treat as drivable. Tracks, paths and footways are deliberately out:
+// snapping a car onto a footpath is worse than not snapping at all.
+var OSM_ROAD_RE = '^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|pedestrian)$';
+var OSM_RAIL_RE = '^(subway|light_rail|rail|tram|monorail|funicular)$';
+
+var OSM_FETCH_RADIUS = 900;    // metres of half-bbox to request
+var OSM_REFETCH_AT = 450;      // refetch once the player is this far from the last centre
+var OSM_CELL = 60;             // spatial index cell size, metres
+
+var osmNet = {
+  ready: false,
+  loading: false,
+  failures: 0,
+  disabled: false,
+  originLat: 0,
+  originLon: 0,
+  centerLat: null,
+  centerLon: null,
+  roads: [],   // segment list, local metres
+  rails: [],
+  roadGrid: null,
+  railGrid: null,
+  railLines: [],
+  lastError: null
+};
+
+function osmProject(latDeg, lonDeg) {
+  var kx = Math.cos(Cesium.Math.toRadians(osmNet.originLat)) * EARTH_R * Math.PI / 180;
+  var ky = EARTH_R * Math.PI / 180;
+  return { x: (lonDeg - osmNet.originLon) * kx, y: (latDeg - osmNet.originLat) * ky };
+}
+
+function osmUnproject(x, y) {
+  var kx = Math.cos(Cesium.Math.toRadians(osmNet.originLat)) * EARTH_R * Math.PI / 180;
+  var ky = EARTH_R * Math.PI / 180;
+  return { lat: osmNet.originLat + y / ky, lon: osmNet.originLon + x / kx };
+}
+
+function osmBuildGrid(segments) {
+  var grid = Object.create(null);
+  for (var i = 0; i < segments.length; i++) {
+    var s = segments[i];
+    // Stamp the segment into every cell its bounding box touches, so a long
+    // segment is still found from a cell in the middle of it.
+    var x0 = Math.floor(Math.min(s.ax, s.bx) / OSM_CELL);
+    var x1 = Math.floor(Math.max(s.ax, s.bx) / OSM_CELL);
+    var y0 = Math.floor(Math.min(s.ay, s.by) / OSM_CELL);
+    var y1 = Math.floor(Math.max(s.ay, s.by) / OSM_CELL);
+    for (var gx = x0; gx <= x1; gx++) {
+      for (var gy = y0; gy <= y1; gy++) {
+        var k = gx + ',' + gy;
+        (grid[k] || (grid[k] = [])).push(i);
+      }
+    }
+  }
+  return grid;
+}
+
+/* Nearest point on the network to a local-frame position. Searches outward a
+   ring at a time so a hit in the centre cell ends it immediately. */
+function osmNearest(segments, grid, x, y, maxDist) {
+  if (!grid || !segments.length) return null;
+  var rings = Math.max(1, Math.ceil(maxDist / OSM_CELL));
+  var cx = Math.floor(x / OSM_CELL), cy = Math.floor(y / OSM_CELL);
+  var best = null, seen = Object.create(null);
+
+  for (var r = 0; r <= rings; r++) {
+    for (var gx = cx - r; gx <= cx + r; gx++) {
+      for (var gy = cy - r; gy <= cy + r; gy++) {
+        // Only the newly added ring, not the filled square.
+        if (r > 0 && Math.abs(gx - cx) !== r && Math.abs(gy - cy) !== r) continue;
+        var bucket = grid[gx + ',' + gy];
+        if (!bucket) continue;
+        for (var i = 0; i < bucket.length; i++) {
+          var si = bucket[i];
+          if (seen[si]) continue;
+          seen[si] = 1;
+          var s = segments[si];
+          var dx = s.bx - s.ax, dy = s.by - s.ay;
+          var len2 = dx * dx + dy * dy;
+          var t = len2 > 0 ? (((x - s.ax) * dx + (y - s.ay) * dy) / len2) : 0;
+          t = Math.max(0, Math.min(1, t));
+          var px = s.ax + t * dx, py = s.ay + t * dy;
+          var d = Math.hypot(x - px, y - py);
+          if (!best || d < best.dist) {
+            best = { dist: d, x: px, y: py, t: t, seg: s,
+                     heading: Math.atan2(dx, dy) };
+          }
+        }
+      }
+    }
+    // A hit inside the ring already scanned cannot be beaten by a further ring.
+    if (best && best.dist <= r * OSM_CELL) break;
+  }
+  if (best && best.dist > maxDist) return null;
+  return best;
+}
+
+function osmWayIsElevated(tags) {
+  if (!tags) return false;
+  if (tags.bridge && tags.bridge !== 'no') return true;
+  var layer = parseInt(tags.layer, 10);
+  return isFinite(layer) && layer > 0;
+}
+
+function osmWayIsTunnel(tags) {
+  if (!tags) return false;
+  if (tags.tunnel && tags.tunnel !== 'no') return true;
+  var layer = parseInt(tags.layer, 10);
+  return isFinite(layer) && layer < 0;
+}
+
+// Rough lane half-width, used to decide when a car is "off the road".
+function osmRoadHalfWidth(tags) {
+  if (!tags) return 6;
+  var w = parseFloat(tags.width);
+  if (isFinite(w) && w > 1) return Math.max(3, w / 2);
+  var lanes = parseInt(tags.lanes, 10);
+  if (isFinite(lanes) && lanes > 0) return Math.max(3, lanes * 3.2 / 2 + 1);
+  var hw = tags.highway;
+  if (hw === 'motorway' || hw === 'trunk') return 11;
+  if (hw === 'primary') return 9;
+  if (hw === 'secondary') return 8;
+  if (hw === 'tertiary') return 7;
+  if (hw === 'service') return 4;
+  return 6;
+}
+
+function osmOverpassQuery(south, west, north, east) {
+  var bbox = south.toFixed(5) + ',' + west.toFixed(5) + ',' + north.toFixed(5) + ',' + east.toFixed(5);
+  return '[out:json][timeout:25];(' +
+    'way["highway"~"' + OSM_ROAD_RE + '"](' + bbox + ');' +
+    'way["railway"~"' + OSM_RAIL_RE + '"](' + bbox + ');' +
+    ');out geom;';
+}
+
+function osmNeedsFetch(latDeg, lonDeg) {
+  if (osmNet.disabled || osmNet.loading) return false;
+  if (osmNet.centerLat === null) return true;
+  return metersDeg(latDeg, lonDeg, osmNet.centerLat, osmNet.centerLon) > OSM_REFETCH_AT;
+}
+
+async function osmFetchAround(latDeg, lonDeg) {
+  if (osmNet.disabled || osmNet.loading) return;
+  osmNet.loading = true;
+
+  var dLat = OSM_FETCH_RADIUS / 111320;
+  var dLon = OSM_FETCH_RADIUS / (111320 * Math.max(0.15, Math.cos(Cesium.Math.toRadians(latDeg))));
+  var body = 'data=' + encodeURIComponent(
+    osmOverpassQuery(latDeg - dLat, lonDeg - dLon, latDeg + dLat, lonDeg + dLon));
+
+  var json = null;
+  for (var e = 0; e < OSM_ENDPOINTS.length && !json; e++) {
+    try {
+      var ctrl = new AbortController();
+      var killer = setTimeout(function() { ctrl.abort(); }, 15000);
+      var res = await fetch(OSM_ENDPOINTS[e], {
+        method: 'POST',
+        body: body,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        signal: ctrl.signal
+      });
+      clearTimeout(killer);
+      if (res.ok) json = await res.json();
+      else osmNet.lastError = 'HTTP ' + res.status;
+    } catch (err) {
+      osmNet.lastError = String(err && err.message || err);
+    }
+  }
+
+  osmNet.loading = false;
+  if (!json || !json.elements) {
+    osmNet.failures++;
+    // Two dead rounds is enough: stop hammering a service that is rate
+    // limiting us and let the offline behaviour take over for this session.
+    if (osmNet.failures >= 2) osmNet.disabled = true;
+    return;
+  }
+
+  osmNet.failures = 0;
+  osmIngest(json, latDeg, lonDeg);
+}
+
+function osmIngest(json, centerLat, centerLon) {
+  osmNet.originLat = centerLat;
+  osmNet.originLon = centerLon;
+
+  var roads = [], rails = [], railLines = [];
+
+  for (var i = 0; i < json.elements.length; i++) {
+    var el = json.elements[i];
+    if (el.type !== 'way' || !el.geometry || el.geometry.length < 2) continue;
+    var tags = el.tags || {};
+    var isRail = !!tags.railway;
+    var target = isRail ? rails : roads;
+
+    var pts = [];
+    for (var g = 0; g < el.geometry.length; g++) {
+      var p = osmProject(el.geometry[g].lat, el.geometry[g].lon);
+      p.lat = el.geometry[g].lat;
+      p.lon = el.geometry[g].lon;
+      pts.push(p);
+    }
+
+    var meta = {
+      id: el.id,
+      tags: tags,
+      elevated: osmWayIsElevated(tags),
+      tunnel: osmWayIsTunnel(tags),
+      halfWidth: isRail ? 3 : osmRoadHalfWidth(tags),
+      oneway: tags.oneway === 'yes' || tags.junction === 'roundabout'
+    };
+
+    for (var s = 0; s < pts.length - 1; s++) {
+      target.push({
+        ax: pts[s].x, ay: pts[s].y, bx: pts[s + 1].x, by: pts[s + 1].y,
+        meta: meta
+      });
+    }
+    if (isRail) railLines.push({ pts: pts, meta: meta });
+  }
+
+  osmNet.roads = roads;
+  osmNet.rails = rails;
+  osmNet.railLines = railLines;
+  osmNet.roadGrid = osmBuildGrid(roads);
+  osmNet.railGrid = osmBuildGrid(rails);
+  osmBuildRailEndpoints();
+  osmNet.centerLat = centerLat;
+  osmNet.centerLon = centerLon;
+  osmNet.ready = roads.length > 0 || rails.length > 0;
+}
+
+// Called from the sim loop; fires and forgets, never blocks a frame.
+function osmMaintain(latDeg, lonDeg) {
+  if (osmNeedsFetch(latDeg, lonDeg)) osmFetchAround(latDeg, lonDeg);
+}
+
+function osmNearestRoad(latDeg, lonDeg, maxDist) {
+  if (!osmNet.ready) return null;
+  var p = osmProject(latDeg, lonDeg);
+  var hit = osmNearest(osmNet.roads, osmNet.roadGrid, p.x, p.y, maxDist);
+  if (!hit) return null;
+  var ll = osmUnproject(hit.x, hit.y);
+  hit.lat = ll.lat;
+  hit.lon = ll.lon;
+  return hit;
+}
+
+function osmNearestRail(latDeg, lonDeg, maxDist) {
+  if (!osmNet.ready) return null;
+  var p = osmProject(latDeg, lonDeg);
+  var hit = osmNearest(osmNet.rails, osmNet.railGrid, p.x, p.y, maxDist);
+  if (!hit) return null;
+  var ll = osmUnproject(hit.x, hit.y);
+  hit.lat = ll.lat;
+  hit.lon = ll.lon;
+  return hit;
+}
+
 var trainTrackState = { lineIndex: 0, segIndex: 0, segT: 0 };
 var lastRoadVehicle = 'sedan';
 
@@ -2041,6 +2331,23 @@ function findNearestRail(latDeg, lonDeg, maxDist) {
 function snapToNearestSubwayTrack(maxDist) {
   var curLat = Cesium.Math.toDegrees(simState.lat);
   var curLon = Cesium.Math.toDegrees(simState.lon);
+
+  // Real geometry first: OSM has the actual curve of the right of way,
+  // where SUBWAY_LINES only has a straight line between two stations.
+  trackHeightState.value = null;
+  consistTrail.length = 0;
+  if (railRiderAttachOsm(curLat, curLon, Math.min(maxDist, 400))) {
+    var op = railRiderPointOsm();
+    simState.lat = Cesium.Math.toRadians(op.lat);
+    simState.lon = Cesium.Math.toRadians(op.lon);
+    simState.heading = op.heading;
+    var osurf = sampleSurfaceAt(op.lat, op.lon);
+    if (osurf !== null) { simState.ground = osurf; simState.groundTarget = osurf; }
+    simState.height = railDeckHeight(op, simState.ground, 1, 0);
+    return true;
+  }
+
+  railRider.mode = 'legacy';
   var best = findNearestRail(curLat, curLon, maxDist);
   if (!best) return false;
 
@@ -2051,8 +2358,335 @@ function snapToNearestSubwayTrack(maxDist) {
   simState.lat = Cesium.Math.toRadians(best.lat);
   simState.lon = Cesium.Math.toRadians(best.lon);
   simState.heading = best.heading;
-  simState.height = simState.ground + best.h;
+  var lsurf = sampleSurfaceAt(best.lat, best.lon);
+  if (lsurf !== null) { simState.ground = lsurf; simState.groundTarget = lsurf; }
+  simState.height = railDeckHeight(best, simState.ground, 1, 0);
   return true;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Road assist and the climb guard
+
+   Two independent defences against driving up the side of a building:
+
+   * The climb guard watches the sampled surface. Streets are flat-ish; a
+     kerb is ~0.2 m and a driveway ramp a couple of degrees. A jump of more
+     than a metre or so over one sample is a wall, so we refuse the new
+     height, stop the car at the face of it and let the player back off. It
+     needs no data at all, so it works everywhere, including when Overpass
+     is unreachable.
+   * Road assist pulls the car back toward the nearest OSM centreline once
+     it strays past the edge of the carriageway. It is a lateral correction
+     rather than a rail, so you can still cut a corner or pull over; it just
+     will not let you leave the street grid entirely.
+   ──────────────────────────────────────────────────────────── */
+var ROAD_MODES = [
+  { id: 'free',   label: 'Free',   pull: 0,    maxDist: 0 },
+  { id: 'assist', label: 'Assist', pull: 0.45, maxDist: 45 },
+  { id: 'locked', label: 'Locked', pull: 1.0,  maxDist: 90 }
+];
+var roadModeIdx = 1;
+
+function roadMode() { return ROAD_MODES[roadModeIdx]; }
+
+function loadRoadPref() {
+  try {
+    var v = localStorage.getItem('atlas_roadmode');
+    for (var i = 0; i < ROAD_MODES.length; i++) {
+      if (ROAD_MODES[i].id === v) { roadModeIdx = i; return; }
+    }
+  } catch (e) {}
+}
+
+function updateRoadBtn() {
+  var b = $('roadBtn');
+  if (b) b.textContent = 'Roads: ' + roadMode().label;
+}
+
+function cycleRoadMode() {
+  roadModeIdx = (roadModeIdx + 1) % ROAD_MODES.length;
+  try { localStorage.setItem('atlas_roadmode', roadMode().id); } catch (e) {}
+  updateRoadBtn();
+  var m = roadMode();
+  showToast(m.id === 'free' ? 'Road assist off — free driving'
+          : m.id === 'locked' ? 'Locked to the street grid'
+          : 'Road assist on');
+}
+
+/* Pull the car back toward the centreline once it is past the kerb. The
+   correction is applied to position, not to steering, so it never fights
+   the wheel — it just bounds how far the drift can go. */
+function applyRoadAssist(state, dt) {
+  var mode = roadMode();
+  if (mode.pull <= 0 || !osmNet.ready) { state.offRoad = false; return; }
+
+  var latDeg = Cesium.Math.toDegrees(state.lat);
+  var lonDeg = Cesium.Math.toDegrees(state.lon);
+  var hit = osmNearestRoad(latDeg, lonDeg, mode.maxDist);
+  if (!hit) { state.offRoad = true; return; }
+
+  var slack = hit.seg.meta.halfWidth;
+  state.offRoad = hit.dist > slack;
+  if (hit.dist <= slack) return;
+
+  // Ease in over the first few metres past the kerb so the correction is
+  // felt as the road crowning back, not as a yank.
+  var over = hit.dist - slack;
+  var strength = Math.min(1, over / 6) * mode.pull;
+  var k = Math.min(1, strength * 3.5 * dt);
+
+  state.lat += (Cesium.Math.toRadians(hit.lat) - state.lat) * k;
+  state.lon += (Cesium.Math.toRadians(hit.lon) - state.lon) * k;
+
+  // In Locked mode also settle the nose onto the road's bearing, which is
+  // what keeps you tracking a curve instead of sawing across it.
+  if (mode.id === 'locked' && Math.abs(state.speed) > 2) {
+    var fwd = hit.heading;
+    if (Math.abs(angleDiff(state.heading, fwd)) > Math.PI / 2) fwd += Math.PI;
+    state.heading += angleDiff(state.heading, fwd) * Math.min(1, 2.2 * dt);
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+   Rail rider
+
+   Follows real OSM rail geometry when we have it, and the hand-authored
+   SUBWAY_LINES station chain when we do not. OSM ways are short fragments,
+   so reaching the end of one means picking the next: we take the connected
+   way whose bearing best continues the current heading, which follows the
+   through route at a junction rather than diving down a siding.
+   ──────────────────────────────────────────────────────────── */
+var railRider = { mode: 'legacy', lineIdx: -1, idx: 0, t: 0, dir: 1 };
+
+function railEndpointKey(p) {
+  return Math.round(p.lat * 2e5) + ':' + Math.round(p.lon * 2e5);
+}
+
+function osmBuildRailEndpoints() {
+  var map = Object.create(null);
+  for (var i = 0; i < osmNet.railLines.length; i++) {
+    var pts = osmNet.railLines[i].pts;
+    var ka = railEndpointKey(pts[0]);
+    var kb = railEndpointKey(pts[pts.length - 1]);
+    (map[ka] || (map[ka] = [])).push({ line: i, end: 0 });
+    (map[kb] || (map[kb] = [])).push({ line: i, end: 1 });
+  }
+  osmNet.railEndpoints = map;
+}
+
+function railRiderLine() { return osmNet.railLines[railRider.lineIdx]; }
+
+function railSegLen(pts, i) {
+  return Math.max(0.5, Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y));
+}
+
+// Snap onto OSM rail near a point. Returns false when there is no rail data.
+function railRiderAttachOsm(latDeg, lonDeg, maxDist) {
+  if (!osmNet.ready || !osmNet.railLines.length) return false;
+  var p = osmProject(latDeg, lonDeg);
+  var best = null;
+
+  for (var li = 0; li < osmNet.railLines.length; li++) {
+    var pts = osmNet.railLines[li].pts;
+    for (var i = 0; i < pts.length - 1; i++) {
+      var dx = pts[i + 1].x - pts[i].x, dy = pts[i + 1].y - pts[i].y;
+      var len2 = dx * dx + dy * dy;
+      var t = len2 > 0 ? (((p.x - pts[i].x) * dx + (p.y - pts[i].y) * dy) / len2) : 0;
+      t = Math.max(0, Math.min(1, t));
+      var d = Math.hypot(p.x - (pts[i].x + t * dx), p.y - (pts[i].y + t * dy));
+      if (!best || d < best.d) best = { d: d, li: li, i: i, t: t };
+    }
+  }
+  if (!best || best.d > maxDist) return false;
+
+  railRider.mode = 'osm';
+  railRider.lineIdx = best.li;
+  railRider.idx = best.i;
+  railRider.t = best.t;
+  railRider.dir = 1;
+  return true;
+}
+
+function railRiderPointOsm() {
+  var line = railRiderLine();
+  if (!line) return null;
+  var pts = line.pts;
+  var i = Math.max(0, Math.min(pts.length - 2, railRider.idx));
+  var t = railRider.t;
+  var a = pts[i], b = pts[i + 1];
+  return {
+    lat: a.lat + (b.lat - a.lat) * t,
+    lon: a.lon + (b.lon - a.lon) * t,
+    heading: Math.atan2(b.lon - a.lon, b.lat - a.lat),
+    meta: line.meta
+  };
+}
+
+/* Walk the current way; when it runs out, hand off to the best-aligned
+   connected way. `meters` may be negative to run in reverse. */
+function railRiderAdvance(meters) {
+  if (railRider.mode !== 'osm') return;
+  var guard = 0;
+  while (guard++ < 400) {
+    var line = railRiderLine();
+    if (!line) return;
+    var pts = line.pts;
+    var segLen = railSegLen(pts, Math.max(0, Math.min(pts.length - 2, railRider.idx)));
+
+    if (meters >= 0) {
+      var avail = (1 - railRider.t) * segLen;
+      if (meters <= avail) { railRider.t += meters / segLen; return; }
+      meters -= avail;
+      if (railRider.idx < pts.length - 2) { railRider.idx++; railRider.t = 0; continue; }
+      if (!railRiderHandoff(1)) { railRider.t = 1; return; }
+    } else {
+      var back = railRider.t * segLen;
+      if (-meters <= back) { railRider.t += meters / segLen; return; }
+      meters += back;
+      if (railRider.idx > 0) { railRider.idx--; railRider.t = 1; continue; }
+      if (!railRiderHandoff(0)) { railRider.t = 0; return; }
+    }
+  }
+}
+
+/* `end` is which end of the current way we ran off: 1 = far end, 0 = near. */
+function railRiderHandoff(end) {
+  var line = railRiderLine();
+  if (!line || !osmNet.railEndpoints) return false;
+  var pts = line.pts;
+  var exitPt = end === 1 ? pts[pts.length - 1] : pts[0];
+  var prevPt = end === 1 ? pts[pts.length - 2] : pts[1];
+  var travel = Math.atan2(exitPt.x - prevPt.x, exitPt.y - prevPt.y);
+
+  var cands = osmNet.railEndpoints[railEndpointKey(exitPt)];
+  if (!cands) return false;
+
+  var best = null;
+  for (var c = 0; c < cands.length; c++) {
+    var cd = cands[c];
+    if (cd.line === railRider.lineIdx) continue;
+    var cpts = osmNet.railLines[cd.line].pts;
+    if (cpts.length < 2) continue;
+    // Bearing leaving the joint along the candidate.
+    var p0 = cd.end === 0 ? cpts[0] : cpts[cpts.length - 1];
+    var p1 = cd.end === 0 ? cpts[1] : cpts[cpts.length - 2];
+    var out = Math.atan2(p1.x - p0.x, p1.y - p0.y);
+    var turn = Math.abs(angleDiff(travel, out));
+    // Reversing onto a stub is never the through route.
+    if (turn > Math.PI * 0.62) continue;
+    if (!best || turn < best.turn) best = { turn: turn, cd: cd, cpts: cpts };
+  }
+  if (!best) return false;
+
+  railRider.lineIdx = best.cd.line;
+  if (best.cd.end === 0) { railRider.idx = 0; railRider.t = 0; }
+  else { railRider.idx = best.cpts.length - 2; railRider.t = 1; }
+  return true;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Track height
+
+   The photoreal mesh already contains the viaduct, so on an elevated
+   stretch `sampleHeight` returns the deck itself and the train belongs a
+   rail's thickness above it — not `ground + 10`, which is what used to
+   launch it into the air over Coney Island. In a tunnel the same sample is
+   the street overhead, so there we subtract instead. Either way the result
+   is rate-limited: a viaduct does not gain eight metres between two frames,
+   so a sample that says it did has hit a building or a passing structure.
+   ──────────────────────────────────────────────────────────── */
+var trackHeightState = { value: null, lastLat: 0, lastLon: 0 };
+
+/* A direct, uncached surface probe. Snapping to track moves the train
+   somewhere the smoothed `simState.ground` has never sampled, and seeding the
+   deck height from the old position is what made it ramp up to the viaduct
+   over the first few seconds instead of starting on it. */
+function sampleSurfaceAt(latDeg, lonDeg) {
+  if (!scene) return null;
+  var c = Cesium.Cartographic.fromDegrees(lonDeg, latDeg, 0);
+  if (scene.sampleHeightSupported) {
+    var h = scene.sampleHeight(c);
+    if (h !== undefined && isFinite(h)) return h;
+  }
+  if (scene.globe && scene.globe.show) {
+    var g = scene.globe.getHeight(c);
+    if (g !== undefined && isFinite(g)) return g;
+  }
+  return null;
+}
+
+function railDeckHeight(pt, surface, dt, speed) {
+  var elevated = pt.meta ? pt.meta.elevated : (pt.h > 2);
+  var tunnel = pt.meta ? pt.meta.tunnel : (pt.h < -1);
+
+  var target;
+  if (tunnel) {
+    // No mesh underground: hang below the street by the authored depth.
+    var depth = pt.meta ? 12 : Math.abs(pt.h);
+    target = surface - depth;
+  } else {
+    // On the deck (elevated) or on the ballast (at grade) the sampled
+    // surface IS the running surface.
+    target = surface + 0.7;
+  }
+
+  if (trackHeightState.value === null) { trackHeightState.value = target; return target; }
+
+  // Allow a real grade (a viaduct ramp is well under 10%) but nothing steeper.
+  var travelled = Math.max(0.5, Math.abs(speed) * dt);
+  var maxStep = Math.max(0.35, travelled * 0.18);
+  var delta = target - trackHeightState.value;
+  if (delta > maxStep) delta = maxStep;
+  else if (delta < -maxStep) delta = -maxStep;
+  trackHeightState.value += delta;
+  return trackHeightState.value;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Consist trail
+
+   Trailing cars ride a breadcrumb of where the lead car has actually been.
+   That keeps them on the rails through curves and across the joints between
+   OSM ways without needing to re-walk the geometry backwards.
+   ──────────────────────────────────────────────────────────── */
+var consistTrail = [];
+var CONSIST_TRAIL_M = 140;
+
+function consistPush(lat, lon, h, heading) {
+  var last = consistTrail[0];
+  if (last) {
+    var d = metersDeg(lat, lon, last.lat, last.lon);
+    if (d < 1.5) return;
+    consistTrail.unshift({ lat: lat, lon: lon, h: h, heading: heading, d: d });
+  } else {
+    consistTrail.unshift({ lat: lat, lon: lon, h: h, heading: heading, d: 0 });
+  }
+  var acc = 0;
+  for (var i = 0; i < consistTrail.length; i++) {
+    acc += consistTrail[i].d;
+    if (acc > CONSIST_TRAIL_M) { consistTrail.length = i + 1; break; }
+  }
+}
+
+function consistSample(back) {
+  if (!consistTrail.length) return null;
+  var acc = 0;
+  for (var i = 1; i < consistTrail.length; i++) {
+    var prev = acc;
+    acc += consistTrail[i].d;
+    if (acc >= back) {
+      var span = Math.max(0.001, acc - prev);
+      var t = (back - prev) / span;
+      var a = consistTrail[i - 1], b = consistTrail[i];
+      return {
+        lat: a.lat + (b.lat - a.lat) * t,
+        lon: a.lon + (b.lon - a.lon) * t,
+        h: a.h + (b.h - a.h) * t,
+        heading: a.heading
+      };
+    }
+  }
+  return consistTrail[consistTrail.length - 1];
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -2084,6 +2718,7 @@ function initVehicleRig(groundH) {
   };
 
   createVehicleEntity();
+  ensureVehicleModel(sel.vehicle);
 
   if (isTrain) {
     if (!snapToNearestSubwayTrack(4000)) {
@@ -2192,9 +2827,149 @@ function changeVehicleInGame(newVehId) {
   if (newSpec.kind === 'fly') { simState.burn = 100; simState.burnMix = 0; simState.burnLock = 0; simState.burnReady = true; }
 
   createVehicleEntity();
+  ensureVehicleModel(sel.vehicle);
   ensureTrailers();
   setupTouchPads();
   showToast('Switched to ' + newSpec.label);
+}
+
+/* ────────────────────────────────────────────────────────────
+   Vehicle models
+
+   The road cars are a real glTF asset instead of a coloured box: Khronos'
+   "Car Concept" (CC-BY-4.0), served from jsDelivr — the same CDN this page
+   already falls back to for Cesium itself. We pull the Draco + KTX2 variant,
+   which is 3.5 MB against 11.8 MB for the plain GLB, because this app is
+   played on phones and the download is the expensive part.
+
+   One asset covers all three road cars: Cesium can tint a model at draw
+   time, so the sedan and the taxi are the same mesh under a colour blend and
+   cost no extra bytes. The sport coupe keeps the asset's own metallic-flake
+   paint, which is the whole reason to use it.
+
+   Measured from the asset itself (not guessed): 4.357 m long, Y-up, and its
+   nose lands on `heading - 90°`, the same convention the box chassis uses.
+   ──────────────────────────────────────────────────────────── */
+var CAR_MODEL_URL =
+  'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/CarConcept/glTF-KTX-BasisU-Draco/CarConcept.gltf';
+
+var VEHICLE_MODELS = {
+  sedan: { url: CAR_MODEL_URL, length: 4.357, sink: 0.16, tint: '#20486b', blend: 0.75 },
+  taxi:  { url: CAR_MODEL_URL, length: 4.357, sink: 0.16, tint: '#f6b21b', blend: 0.8 },
+  sport: { url: CAR_MODEL_URL, length: 4.357, sink: 0.16, tint: null }
+};
+
+var vehicleModel = null;       // the live Cesium.Model, when one is loaded
+var vehicleModelFor = null;    // which vehicle id it represents
+var vehicleModelUrl = null;    // which asset is loaded
+var vehicleModelBusy = false;
+var vehicleModelFailed = Object.create(null);
+
+function modelConfigFor(vehId) {
+  return VEHICLE_MODELS[vehId] || null;
+}
+
+function destroyVehicleModel() {
+  if (vehicleModel) {
+    try { scene.primitives.remove(vehicleModel); } catch (e) {}
+    vehicleModel = null;
+  }
+  vehicleModelFor = null;
+  vehicleModelUrl = null;
+}
+
+/* Applies the per-vehicle look to an already-loaded asset. Swapping the tint
+   is what lets one download serve the sedan, the taxi and the coupe. */
+function styleVehicleModel(cfg) {
+  if (!vehicleModel) return;
+  if (cfg.tint) {
+    vehicleModel.color = Cesium.Color.fromCssColorString(cfg.tint);
+    vehicleModel.colorBlendMode = Cesium.ColorBlendMode.MIX;
+    vehicleModel.colorBlendAmount = cfg.blend;
+  } else {
+    vehicleModel.color = Cesium.Color.WHITE;
+    vehicleModel.colorBlendAmount = 0;
+  }
+}
+
+async function ensureVehicleModel(vehId) {
+  var cfg = modelConfigFor(vehId);
+  if (!cfg || !scene) {
+    // Keep the asset in memory so switching car → jet → car is free.
+    vehicleModelFor = null;
+    applyVehicleVisibility();
+    return;
+  }
+  if (vehicleModelFailed[cfg.url]) return;
+
+  // Same asset, different car: restyle rather than re-download.
+  if (vehicleModel && vehicleModelUrl === cfg.url) {
+    vehicleModelFor = vehId;
+    vehicleModel.scale = cfg.length > 0 ? (chassisFor(vehId, VEHICLES[vehId]).y / cfg.length) : 1;
+    styleVehicleModel(cfg);
+    return;
+  }
+  if (vehicleModelBusy) return;
+
+  vehicleModelBusy = true;
+  try {
+    var model = await Cesium.Model.fromGltfAsync({
+      url: cfg.url,
+      scale: chassisFor(vehId, VEHICLES[vehId]).y / cfg.length,
+      // The chassis is authored to the same axes the box used, so no
+      // per-asset heading fix is needed here.
+      modelMatrix: Cesium.Matrix4.IDENTITY.clone(),
+      allowPicking: false,
+      incrementallyLoadTextures: true
+    });
+    // readyEvent only fires from Model.update(), which the scene only calls
+    // for primitives it owns — so it has to go in before we wait on it. It
+    // stays hidden until then so a half-loaded car never flashes up.
+    model.show = false;
+    scene.primitives.add(model);
+    try {
+      await new Promise(function(resolve, reject) {
+        model.readyEvent.addEventListener(function() { resolve(); });
+        model.errorEvent.addEventListener(function(e) { reject(e); });
+        setTimeout(function() { reject(new Error('model load timed out')); }, 45000);
+      });
+    } catch (readyErr) {
+      try { scene.primitives.remove(model); } catch (e2) {}
+      throw readyErr;
+    }
+    destroyVehicleModel();
+    vehicleModel = model;
+    vehicleModelUrl = cfg.url;
+    vehicleModelFor = vehId;
+    styleVehicleModel(cfg);
+    applyVehicleVisibility();
+  } catch (err) {
+    console.warn('Vehicle model unavailable, keeping the box chassis:', err);
+    vehicleModelFailed[cfg.url] = true;
+  }
+  vehicleModelBusy = false;
+}
+
+// The box is the stand-in: it shows until a model arrives, and stays for
+// every vehicle that has no model of its own.
+function applyVehicleVisibility() {
+  var usingModel = !!(vehicleModel && vehicleModelFor === sel.vehicle);
+  var inCockpit = (curCamIdx === 1);
+  if (vehicleEntity) vehicleEntity.show = !usingModel && !inCockpit;
+  if (vehicleModel) vehicleModel.show = usingModel && !inCockpit;
+}
+
+function updateVehicleModelPose(pos) {
+  if (!vehicleModel || vehicleModelFor !== sel.vehicle) return;
+  var cfg = modelConfigFor(sel.vehicle);
+  var scale = vehicleModel.scale || 1;
+  // Drop the origin so the tyres meet the road rather than hovering at the
+  // physics ride height.
+  var groundPos = Cesium.Cartesian3.fromRadians(
+    simState.lon, simState.lat, simState.ground + (cfg ? cfg.sink : 0) * scale);
+  var hpr = new Cesium.HeadingPitchRoll(
+    simState.heading - Math.PI / 2, simState.pitch, simState.roll);
+  vehicleModel.modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(groundPos, hpr);
 }
 
 async function warpToCity(cityIdx) {
@@ -2505,6 +3280,7 @@ function initInputControls() {
 
   $('camSwitchBtn').onclick = cycleCam;
   $('qualityBtn').onclick = cycleQuality;
+  $('roadBtn').onclick = cycleRoadMode;
   $('pauseBtn').onclick = function() { togglePause(true); };
   $('resumeBtn').onclick = function() { togglePause(false); };
   $('exitBtn').onclick = function() { location.reload(); };
@@ -2521,6 +3297,7 @@ function initInputControls() {
 function cycleCam() {
   curCamIdx = (curCamIdx + 1) % CAM_VIEWS.length;
   $('camSwitchBtn').textContent = 'Cam: ' + CAM_VIEWS[curCamIdx].label;
+  applyVehicleVisibility();
   showToast('Camera: ' + CAM_VIEWS[curCamIdx].label);
 }
 
@@ -2711,6 +3488,9 @@ function gameLoop(now) {
 
     if (frameTick % 6 === 0) { scanForRail(); updateBoardPrompt(); }
     if (frameTick % 30 === 0) updateTileDetail();
+    if (frameTick % 45 === 0 && simState.spec.kind !== 'fly') {
+      osmMaintain(Cesium.Math.toDegrees(simState.lat), Cesium.Math.toDegrees(simState.lon));
+    }
     updateAutoQuality(now);
 
     updateSimRender();
@@ -2729,6 +3509,41 @@ function stepTrain(input, dt) {
   simState.speed -= simState.speed * 0.18 * dt;
   simState.speed = Math.max(-v.topSpeed * 0.45, Math.min(v.topSpeed, simState.speed));
   if (Math.abs(simState.speed) < 0.12 && !input.throttle) simState.speed = 0;
+
+  // Data can arrive after the train spawned; take the upgrade when it does.
+  if (railRider.mode !== 'osm' && osmNet.ready && frameTick % 60 === 0) {
+    if (railRiderAttachOsm(Cesium.Math.toDegrees(simState.lat),
+                           Cesium.Math.toDegrees(simState.lon), 30)) {
+      trackHeightState.value = null;
+    }
+  }
+
+  if (railRider.mode === 'osm') {
+    var opt = railRiderPointOsm();
+    if (opt) {
+      railRiderAdvance(simState.speed * dt);
+      opt = railRiderPointOsm();
+      var prevH = simState.height;
+      simState.lat = Cesium.Math.toRadians(opt.lat);
+      simState.lon = Cesium.Math.toRadians(opt.lon);
+
+      var oHdg = opt.heading + (simState.speed < 0 ? Math.PI : 0);
+      simState.heading += angleDiff(simState.heading, oHdg) * Math.min(1, 8 * dt);
+
+      sampleLiveGround(simState, dt);
+      simState.height = railDeckHeight(opt, simState.ground, dt, simState.speed);
+      simState.roll = 0;
+
+      var run = Math.max(0.5, Math.abs(simState.speed) * dt);
+      var grade = Math.atan2(simState.height - prevH, run);
+      simState.pitch += (grade - simState.pitch) * Math.min(1, 3 * dt);
+
+      updateTunnelVeil(opt.meta && opt.meta.tunnel ? -8 : 1);
+      consistPush(opt.lat, opt.lon, simState.height, simState.heading);
+      return;
+    }
+    railRider.mode = 'legacy';
+  }
 
   var line = railNodes(trainTrackState.lineIndex);
   var stepM = simState.speed * dt;
@@ -2767,7 +3582,10 @@ function stepTrain(input, dt) {
   simState.heading += angleDiff(simState.heading, targetHdg) * Math.min(1, 8 * dt);
 
   sampleLiveGround(simState, dt);
-  simState.height = simState.ground + pt.h;
+  /* The photoreal mesh contains the viaduct, so on an elevated stretch the
+     sampled surface is already the deck. Adding the authored height on top
+     of it is what used to fly the train over the Coney Island el. */
+  simState.height = railDeckHeight(pt, simState.ground, dt, simState.speed);
   simState.roll = 0;
 
   // Pitch follows the grade so viaduct climbs read correctly.
@@ -2777,6 +3595,37 @@ function stepTrain(input, dt) {
   simState.pitch += (Math.atan2(rise, run) - simState.pitch) * Math.min(1, 4 * dt);
 
   updateTunnelVeil(pt.h);
+  consistPush(pt.lat, pt.lon, simState.height, simState.heading);
+}
+
+/* Probe a couple of metres up the road. A street never rises 1.5 m over its
+   own width, so a surface that does is a face — a building, a kerb wall, the
+   side of a viaduct — and the car should stop against it instead of treating
+   it as terrain and driving up onto the roof.
+
+   Deliberately a lookahead rather than a check underfoot: a sample taken
+   where the car already is cannot tell "there is a wall in front of me" from
+   "the tiles just finished loading and the street is higher than I thought",
+   and refusing the second one pins the car in place forever. */
+var wallProbe = { blocked: false, tick: -1 };
+
+function drivePathBlocked(state, dt) {
+  if (!scene) return false;
+  // One sample every other frame is plenty: at 120 km/h that is half a metre
+  // of travel against a two-metre lookahead.
+  if (frameTick === wallProbe.tick || frameTick % 2 !== 0) return wallProbe.blocked;
+  wallProbe.tick = frameTick;
+
+  var dir = state.speed < 0 ? -1 : 1;
+  var look = Math.max(2.0, Math.abs(state.speed) * dt * 2 + 1.5);
+  var aheadLat = state.lat + (look * dir * Math.cos(state.heading)) / EARTH_R;
+  var aheadLon = state.lon + (look * dir * Math.sin(state.heading)) /
+                 (EARTH_R * Math.max(0.05, Math.cos(state.lat)));
+
+  var h = sampleSurfaceAt(Cesium.Math.toDegrees(aheadLat), Cesium.Math.toDegrees(aheadLon));
+  if (h === null) { wallProbe.blocked = false; return false; }
+  wallProbe.blocked = (h - state.ground) > Math.max(1.5, look * 0.55);
+  return wallProbe.blocked;
 }
 
 function stepDrive(input, dt) {
@@ -2794,10 +3643,19 @@ function stepDrive(input, dt) {
   simState.heading += input.steer * v.steer * grip * dir * driftMul * dt;
   simState.heading = ((simState.heading % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
 
-  var dDist = simState.speed * dt;
-  simState.lat += (dDist * Math.cos(simState.heading)) / EARTH_R;
-  simState.lon += (dDist * Math.sin(simState.heading)) / (EARTH_R * Math.max(0.05, Math.cos(simState.lat)));
+  simState.blocked = drivePathBlocked(simState, dt);
+  if (simState.blocked) {
+    // Stop against the face instead of driving through it. Checked before the
+    // move, so the car never ends up inside the geometry to begin with.
+    if (Math.abs(simState.speed) > 8) showToast('Blocked');
+    simState.speed *= -0.08;
+  } else {
+    var dDist = simState.speed * dt;
+    simState.lat += (dDist * Math.cos(simState.heading)) / EARTH_R;
+    simState.lon += (dDist * Math.sin(simState.heading)) / (EARTH_R * Math.max(0.05, Math.cos(simState.lat)));
+  }
 
+  applyRoadAssist(simState, dt);
   sampleLiveGround(simState, dt);
   simState.height = simState.ground + v.ride;
   simState.roll += (-input.steer * grip * 0.18 - simState.roll) * 6 * dt;
@@ -2940,25 +3798,21 @@ function updateSimRender() {
   vehicleEntity.position = pos;
   var hpr = new Cesium.HeadingPitchRoll(simState.heading - Math.PI / 2, simState.pitch, simState.roll);
   vehicleEntity.orientation = Cesium.Transforms.headingPitchRollQuaternion(pos, hpr);
-  vehicleEntity.show = (curCamIdx !== 1);
+  updateVehicleModelPose(pos);
+  applyVehicleVisibility();
 
   if (simState.spec.kind === 'train' && trailerEntities.length) {
-    // Trailing cars follow the track itself, so they stay on the rails
-    // through curves instead of cutting the corner.
+    // Trailing cars sit on the breadcrumb of where the lead car has actually
+    // been, so they hold the rails through curves and across the joints
+    // between OSM ways without re-deriving the route backwards.
     for (var i = 0; i < trailerEntities.length; i++) {
-      var back = railWalk(
-        trainTrackState.lineIndex, trainTrackState.segIndex, trainTrackState.segT,
-        -((i + 1) * 20.5) * (simState.speed < 0 ? -1 : 1)
-      );
+      var back = consistSample((i + 1) * 20.5);
+      if (!back) { trailerEntities[i].show = false; continue; }
       var tPos = Cesium.Cartesian3.fromRadians(
-        Cesium.Math.toRadians(back.lon),
-        Cesium.Math.toRadians(back.lat),
-        simState.ground + back.h
-      );
-      var tHdg = back.heading + (simState.speed < 0 ? Math.PI : 0);
+        Cesium.Math.toRadians(back.lon), Cesium.Math.toRadians(back.lat), back.h);
       trailerEntities[i].position = tPos;
       trailerEntities[i].orientation = Cesium.Transforms.headingPitchRollQuaternion(
-        tPos, new Cesium.HeadingPitchRoll(tHdg - Math.PI / 2, simState.pitch, 0)
+        tPos, new Cesium.HeadingPitchRoll(back.heading - Math.PI / 2, simState.pitch, 0)
       );
       trailerEntities[i].show = true;
     }
@@ -3154,6 +4008,8 @@ function setupAuth() {
   loadQualityPref();
   if (qualityAuto) qualityIdx = guessQualityIndex();
   applyQuality();
+  loadRoadPref();
+  updateRoadBtn();
 
   if (checkAuthSession()) unlockApplication();
   else setTimeout(function() { if ($('loginUser')) $('loginUser').focus(); }, 100);
