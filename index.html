@@ -7,6 +7,25 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Atlas 3D World Explorer</title>
 
+<style>
+/* Barlow Condensed (SIL Open Font License 1.1), subsetted to the characters
+   the instrument readouts use — about 4 KB per weight, inlined so there is no
+   font request, no flash of fallback, and it works with no network at all. */
+@font-face {
+  font-family: 'Atlas Numeric';
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url(data:font/woff2;base64,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) format('woff2');
+}
+@font-face {
+  font-family: 'Atlas Numeric';
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url(data:font/woff2;base64,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) format('woff2');
+}
+</style>
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 <link rel="preconnect" href="https://tile.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://api.cesium.com" crossorigin>
@@ -48,6 +67,12 @@ if (window.Cesium) {
     --green: #2ecc71;
     --burn: #ff7a2f;
     --border: rgba(238, 242, 245, 0.16);
+    /* Instrument face — used for values only, never for prose. */
+    --num: 'Atlas Numeric', 'Helvetica Neue Condensed', 'Arial Narrow', sans-serif;
+    /* Three radii, and only three: surfaces, controls, pills. */
+    --r-surface: 14px;
+    --r-control: 10px;
+    --r-pill: 999px;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -92,6 +117,7 @@ if (window.Cesium) {
     padding-bottom: 1.2rem;
     margin-bottom: 1.5rem;
   }
+  .brand-actions { display: flex; gap: 8px; align-items: center; flex: none; }
   .brand {
     display: flex;
     align-items: center;
@@ -99,21 +125,27 @@ if (window.Cesium) {
     flex-wrap: wrap;
     gap: 8px;
   }
+  /* The product's own name has to outrank the name of the place you happen to
+     have selected, which was set larger than it. */
   h1 {
     margin: 0;
-    font-size: 1.55rem;
+    font-size: clamp(1.7rem, 4.6vw, 2.3rem);
     font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
     display: flex;
     align-items: center;
     gap: 10px;
   }
   .badge {
     font-size: 0.72rem;
-    padding: 3px 8px;
-    border-radius: 4px;
-    background: rgba(46, 204, 113, 0.15);
-    border: 1px solid var(--green);
-    color: var(--green);
+    padding: 5px 10px;
+    line-height: 1.35;
+    border-radius: var(--r-control);
+    background: rgba(238, 242, 245, 0.08);
+    border: 1px solid var(--border);
+    color: var(--paper);
+    opacity: 0.7;
     font-family: monospace;
     font-weight: 600;
   }
@@ -124,21 +156,26 @@ if (window.Cesium) {
     max-width: 65ch;
   }
 
+  /* The place name is what a person came for; its coordinates are a detail
+     underneath it, not a 34px orange headline above it. */
+  .place-hero {
+    font-size: clamp(1.15rem, 3.4vw, 1.5rem);
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 0.4rem 0 0.15rem;
+    min-height: 1.2em;
+  }
   .readout {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: clamp(1.6rem, 5.5vw, 2.4rem);
-    font-weight: 700;
-    color: var(--gold);
-    margin: 0.3rem 0 0.1rem;
+    font-family: var(--num);
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--paper);
+    opacity: 0.5;
+    margin: 0 0 1.4rem;
     font-variant-numeric: tabular-nums;
   }
-  .readout span { color: var(--paper); opacity: 0.35; }
-  #placeLine {
-    font-size: 0.95rem;
-    opacity: 0.8;
-    min-height: 1.5em;
-    margin-bottom: 1.4rem;
-  }
+  .readout span { opacity: 0.4; }
 
   h2 {
     font-size: 0.85rem;
@@ -150,6 +187,20 @@ if (window.Cesium) {
   }
   h2:first-of-type { margin-top: 0; }
 
+  .btn-link {
+    background: none;
+    border: 0;
+    color: var(--paper);
+    opacity: 0.6;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 10px 0 0;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .btn-link:hover { opacity: 1; }
   .select-row {
     margin-bottom: 12px;
     display: flex;
@@ -163,14 +214,15 @@ if (window.Cesium) {
     font: inherit;
     font-size: 0.92rem;
     font-weight: 600;
-    padding: 10px 14px;
-    border-radius: 8px;
+    height: 48px;
+    padding: 0 14px;
+    border-radius: var(--r-control);
     width: 100%;
     cursor: pointer;
     outline: none;
     transition: border-color 0.15s ease;
   }
-  select.styled-select:focus { border-color: var(--gold); }
+  select.styled-select:focus { border-color: var(--accent); }
   select.styled-select option, select.styled-select optgroup {
     background: #0a131a;
     color: #eef2f5;
@@ -184,12 +236,15 @@ if (window.Cesium) {
   .card {
     background: rgba(19, 36, 49, 0.65);
     border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
     padding: 11px 13px;
     cursor: pointer;
     text-align: left;
     font: inherit;
     color: inherit;
-    border-radius: 8px;
+    border-radius: var(--r-surface);
     transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
   }
   .card:active { transform: scale(0.98); }
@@ -200,6 +255,7 @@ if (window.Cesium) {
     box-shadow: 0 0 0 1px var(--accent);
   }
   .card b { display: block; font-weight: 600; font-size: 0.9rem; }
+  .card em { font-family: var(--num); letter-spacing: 0.02em; }
   .card em {
     font-style: normal;
     font-family: monospace;
@@ -219,9 +275,29 @@ if (window.Cesium) {
     padding: 11px 14px;
     flex: 1;
     min-width: 170px;
-    border-radius: 6px;
+    border-radius: var(--r-control);
   }
-  input:focus { outline: 2px solid var(--gold); }
+  input:focus { outline: 2px solid var(--accent); }
+
+  /* The launcher is three screens tall on a phone, so the primary action is
+     pinned rather than left at the bottom of the scroll. */
+  /* The dock is fixed, so the scrolling column has to reserve its height or
+     the last card row is sliced through its x-height. */
+  body.authed #launcher .container { padding-bottom: 128px; }
+  #launchDock {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: 0;
+    display: none;
+    padding: 34px 16px calc(env(safe-area-inset-bottom) + 14px);
+    background: linear-gradient(to top,
+                rgba(10,19,26,1) 0%, rgba(10,19,26,0.97) 46%, rgba(10,19,26,0) 100%);
+    z-index: 20;
+  }
+  body.authed #launchDock { display: block; }
+  body.running #launchDock { display: none !important; }
+  #launchDock .btn-go { width: 100%; justify-content: center; }
+  #launchDock .dock-inner { max-width: 780px; margin: 0 auto; }
 
   .action-bar {
     margin-top: 2rem;
@@ -239,7 +315,7 @@ if (window.Cesium) {
     font-weight: 700;
     padding: 14px 34px;
     cursor: pointer;
-    border-radius: 8px;
+    border-radius: 999px;
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -249,6 +325,10 @@ if (window.Cesium) {
   .btn-go:hover { filter: brightness(1.15); transform: translateY(-1px); }
   .btn-go:active { transform: scale(0.97); }
   .btn-ghost {
+    border-radius: 999px;
+    padding: 13px 22px;
+    font-size: 0.95rem;
+    font-weight: 700;
     background: transparent;
     border: 1px solid var(--border);
     color: var(--paper);
@@ -281,6 +361,17 @@ if (window.Cesium) {
     background: #0a131a;
   }
   #cesium { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* Tightens with speed so a still frame reads as motion. */
+  #speedVeil {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    z-index: 2;
+    background: radial-gradient(ellipse 78% 66% at 50% 52%,
+                rgba(0,0,0,0) 42%, rgba(0,0,0,0.55) 100%);
+  }
   .cesium-viewer-toolbar,
   .cesium-viewer-animationContainer,
   .cesium-viewer-timelineContainer,
@@ -358,31 +449,94 @@ if (window.Cesium) {
   /* Top HUD Bar */
   #topBar {
     position: fixed;
-    top: calc(env(safe-area-inset-top) + 6px);
-    left: 0;
-    right: 0;
-    padding: 0 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+    top: calc(env(safe-area-inset-top) + 16px);
+    left: calc(env(safe-area-inset-left) + 12px);
+    right: calc(env(safe-area-inset-right) + 12px);
+    display: block;
     z-index: 25;
     pointer-events: none;
   }
   #topBar > * { pointer-events: auto; }
+  #topBar .hud-plate { display: inline-block; }
 
-  .hud-row {
+  /* The instrument tile owns the top-left corner and the icon rail owns the
+     top-right, both absolutely placed — nothing wraps, so the speed readout
+     cannot be pushed out of its corner by however many buttons happen to be
+     showing. */
+  .hud-rail {
+    position: absolute;
+    top: 0;
+    right: 8px;
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
     gap: 6px;
-    flex-wrap: wrap;
+    align-items: center;
   }
-  .hud-selector-bar {
-    display: flex;
-    gap: 6px;
-    flex: 1;
-    max-width: 100%;
+  .icon-btn {
+    width: 48px;
+    height: 48px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    background: rgba(10, 14, 20, 0.72);
+    backdrop-filter: blur(12px) saturate(1.2);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: var(--r-surface);
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.45);
+    padding: 0;
   }
+  .icon-btn svg {
+    width: 20px; height: 20px;
+    fill: none; stroke: currentColor;
+    stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .icon-btn:hover { background: #fff; color: var(--ink); }
+  .icon-btn:active { transform: scale(0.94); }
+  .icon-btn:disabled { opacity: 0.4; cursor: default; }
+  .icon-btn:disabled:hover { background: rgba(10, 19, 26, 0.88); color: #fff; }
+  /* The caption gets the same plate as everything else rather than floating
+     as grey text over whatever happens to be behind it. */
+  /* The contextual action is the most important control on the screen when it
+     is available, so it gets a real button at the bottom centre rather than a
+     22pt chip tucked under the icon row. */
+  #footBtn {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    /* Clear of the pad cluster (two 58px rows plus its own bottom padding)
+       and above it in the stack, or it simply hides behind the pads. */
+    bottom: calc(env(safe-area-inset-bottom) + 180px);
+    display: none;
+    align-items: center;
+    gap: 8px;
+    height: 52px;
+    min-width: 150px;
+    padding: 0 22px;
+    justify-content: center;
+    z-index: 31;
+    border-radius: var(--r-pill);
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    font: inherit;
+    font-size: 0.92rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.5);
+  }
+  #footBtn.on { display: inline-flex; }
+  #footBtn svg {
+    width: 18px; height: 18px; fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  #footBtn:disabled {
+    background: rgba(10, 14, 20, 0.86);
+    border-color: var(--border);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+    cursor: default;
+  }
+  #footBtn:active:not(:disabled) { transform: translateX(-50%) scale(0.97); }
 
   .hud-select {
     background: rgba(10, 19, 26, 0.9);
@@ -405,50 +559,73 @@ if (window.Cesium) {
     color: #eef2f5;
   }
 
+  /* One recipe for anything that has to stay readable over photography we do
+     not control: dark fill, blur so the background loses its detail, a light
+     hairline to separate it from a dark scene, and a drop shadow to separate
+     it from a bright one. */
   .hud-plate {
-    background: rgba(10, 19, 26, 0.88);
-    backdrop-filter: blur(8px);
-    border: 1px solid var(--border);
+    background: rgba(10, 14, 20, 0.72);
+    backdrop-filter: blur(12px) saturate(1.2);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     padding: 6px 10px;
-    border-radius: 6px;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    border-radius: var(--r-surface);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.45);
   }
-  .coord-info {
-    font-family: monospace;
-    font-size: 0.72rem;
-    line-height: 1.35;
-    white-space: nowrap;
-  }
-  .coord-info b { color: var(--gold); }
   .hud-controls { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
   .hud-btn:disabled { opacity: 0.45; cursor: default; }
   .hud-btn:disabled:hover { background: rgba(10, 19, 26, 0.9); color: #fff; }
 
   .search-wrap { position: relative; width: 100%; }
   .search-input {
-    width: 100%; box-sizing: border-box;
-    background: rgba(8, 16, 22, 0.92);
-    border: 1px solid var(--border); border-radius: 12px;
-    color: #fff; font-size: 0.92rem; padding: 10px 12px;
+    width: 100%; box-sizing: border-box; height: 48px;
+    background: rgba(19, 36, 49, 0.95);
+    border: 1px solid var(--border); border-radius: 8px;
+    color: #fff; font-size: 0.92rem; font-weight: 600; padding: 0 14px;
+    font-family: inherit;
+    border-radius: var(--r-control);
   }
+  .search-input::placeholder { font-weight: 500; opacity: 0.55; }
   .search-input:focus { outline: none; border-color: var(--accent); }
   .search-list {
-    display: none; margin-top: 6px; max-height: 210px; overflow-y: auto;
-    border: 1px solid var(--border); border-radius: 12px;
-    background: rgba(8, 16, 22, 0.97);
+    display: none; margin-top: -1px; max-height: 210px; overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 0 0 var(--r-control) var(--r-control);
+    background: rgba(19, 36, 49, 0.98);
+  }
+  .search-list.on ~ .search-input,
+  .search-wrap:has(.search-list.on) .search-input {
+    border-radius: var(--r-control) var(--r-control) 0 0;
   }
   .search-list.on { display: block; }
   .search-hit {
     display: block; width: 100%; text-align: left; background: none;
-    border: 0; border-bottom: 1px solid rgba(255,255,255,0.07);
-    color: #fff; padding: 9px 12px; cursor: pointer; font-size: 0.85rem;
+    border: 0; border-bottom: 1px solid rgba(255,255,255,0.08);
+    color: #fff; padding: 10px 14px; min-height: 56px; cursor: pointer;
+    font-size: 0.85rem;
   }
+  .search-hit:active { background: rgba(229, 57, 130, 0.22); }
   .search-hit:last-child { border-bottom: 0; }
   .search-hit:hover { background: rgba(255,255,255,0.09); }
   .search-hit b { display: block; font-weight: 600; }
   .search-hit span { display: block; opacity: 0.6; font-size: 0.75rem; margin-top: 2px; }
   .search-empty { padding: 10px 12px; font-size: 0.8rem; opacity: 0.6; }
-  .pause-settings { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 4px 0 2px; }
+  .pause-settings {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    margin: 4px 0 2px;
+  }
+  @media (min-width: 620px) {
+    .pause-settings { grid-template-columns: repeat(4, 1fr); }
+  }
+  .pause-settings .hud-btn {
+    padding: 9px 6px;
+    font-size: 0.72rem;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .hud-btn {
     background: rgba(10, 19, 26, 0.9);
     backdrop-filter: blur(8px);
@@ -462,16 +639,83 @@ if (window.Cesium) {
     white-space: nowrap;
   }
   .hud-btn:hover { background: #fff; color: var(--ink); }
-  #speedPlate { text-align: right; min-width: 100px; padding: 4px 9px; }
-  .speed-num { font-family: monospace; font-size: 1.55rem; font-weight: 700; line-height: 1; }
-  .speed-unit { font-size: 0.66rem; opacity: 0.7; margin-left: 2px; }
-  .sub-stat { font-family: monospace; font-size: 0.68rem; opacity: 0.7; margin-top: 1px; }
-  #machStat { color: var(--burn); display: none; }
+  /* The icon rail is four 48px buttons plus gaps, right-anchored. The plate
+     must stop short of it with a real gutter, or its rounded corner ends up
+     tucked behind the camera button. */
+  /* One fixed width for every vehicle, so 1326 km/h sits in the same box as
+     0 km/h and the unit keeps its gutter instead of being shoved off the
+     edge. */
+  /* Every plate in the left rail is the same width — two stacked plates at
+     different widths is the clearest "nobody drew this" signal there is. */
+  #speedPlate, #railPlate {
+    width: 168px;
+    max-width: calc(100% - 220px);
+    padding: 8px 12px;
+  }
+  .speed-line { justify-content: flex-start; flex-wrap: nowrap; gap: 6px; }
+  /* Mach numbers are four digits wide; the numeral steps down rather than
+     pushing the unit onto its own line. */
+  .speed-line.wide .speed-num { font-size: 2.2rem; }
+  .speed-line { display: flex; align-items: baseline; gap: 3px; }
+  .speed-num {
+    font-family: var(--num);
+    font-size: 2.75rem;
+    font-weight: 700;
+    line-height: 0.86;
+    letter-spacing: 0.005em;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Sits on the numeral's own baseline, so the plate never reflows between
+     "0" and "1326". */
+  .speed-unit { font-size: 0.81rem; font-weight: 600; opacity: 0.55; }
+
+  /* One left edge for every label, one right edge for every value. */
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 0.66rem;
+    margin-top: 3px;
+    opacity: 0.75;
+  }
+  .stat-row span { text-transform: uppercase; letter-spacing: 0.06em; }
+  .stat-row b {
+    font-family: var(--num);
+    font-size: 0.86rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.95;
+  }
+  #machStat { display: none; }
+  #machStat b { color: var(--burn); }
+
+  /* The coordinates are the least actionable number on screen; they sit at the
+     bottom of the tile in grey, not at the top in the loudest colour available. */
+  /* Two lines, so a coordinate is never cut mid-number — a truncated number
+     stops the reader dead trying to parse it. */
+  .hud-context {
+    font-family: var(--num);
+    letter-spacing: 0.01em;
+    margin-top: 6px;
+    padding-top: 5px;
+    border-top: 1px solid rgba(255,255,255,0.10);
+    font-size: 0.7rem;
+    line-height: 1.3;
+    color: rgba(255,255,255,0.62);
+  }
+  .hud-context b { display: block; font-weight: 600; }
+  .hud-context span {
+    display: block;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.85;
+  }
 
   #flyStrip { display: none; margin-top: 4px; }
   .meter {
     height: 4px;
-    background: rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.20);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10);
     border-radius: 3px;
     overflow: hidden;
     margin-top: 3px;
@@ -481,20 +725,25 @@ if (window.Cesium) {
     position: absolute;
     inset: 0 auto 0 0;
     width: 0%;
-    background: var(--sky);
+    background: rgba(238, 242, 245, 0.85);
     transition: width 0.1s linear;
   }
   #burnMeter i { background: var(--burn); }
   #burnMeter.dry i { background: #6b7076; }
 
-  #railPlate {
-    display: none;
-    margin-top: 6px;
-    font-size: 0.72rem;
-    max-width: 220px;
+  #railPlate { display: none; margin-top: 8px; }
+  #railLine {
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.75;
+    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  #railLine { font-weight: 700; color: var(--gold); }
-  #railNext { font-family: monospace; opacity: 0.8; font-size: 0.68rem; }
+  #railNext { font-size: 0.7rem; }
 
   #objectiveBox {
     position: fixed;
@@ -521,9 +770,9 @@ if (window.Cesium) {
     bottom: calc(env(safe-area-inset-bottom) + 150px);
     background: rgba(10, 19, 26, 0.94);
     backdrop-filter: blur(8px);
-    border: 1px solid var(--gold);
-    border-radius: 10px;
-    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 10px 14px;
     display: none;
     z-index: 28;
     text-align: center;
@@ -532,9 +781,10 @@ if (window.Cesium) {
   }
   #boardPrompt.on { display: block; }
   #boardText { font-size: 0.78rem; opacity: 0.85; margin-bottom: 6px; }
-  #boardText b { color: var(--gold); }
+  #boardText b { color: var(--accent); }
   #boardBtn {
-    background: var(--gold);
+    border-radius: 999px;
+    background: var(--accent);
     color: #0a131a;
     border: none;
     font: inherit;
@@ -546,24 +796,30 @@ if (window.Cesium) {
   }
   #boardBtn:active { transform: scale(0.97); }
 
+  /* Docked under the HUD, one line, small. It was 28px bold in the middle of
+     the frame, which made a camera change the loudest thing in the product. */
+  /* Its own band, clear of the instrument tile above and the pads below.
+     Nothing may render inside the speed plate's box. */
   #toast {
     position: fixed;
     left: 50%;
+    top: 140px;
     transform: translateX(-50%);
-    top: 36%;
-    font-size: 1.2rem;
-    font-weight: 700;
+    padding: 8px 16px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.35;
     opacity: 0;
-    transition: opacity 0.3s ease;
-    text-shadow: 0 2px 14px rgba(0,0,0,0.9);
+    transition: opacity 0.25s ease;
     text-align: center;
     pointer-events: none;
-    z-index: 30;
-    padding: 6px 16px;
-    background: rgba(10, 19, 26, 0.75);
-    border-radius: 8px;
+    z-index: 40;
+    background: rgba(10, 14, 20, 0.86);
+    backdrop-filter: blur(12px) saturate(1.2);
+    border-radius: var(--r-surface);
     border: 1px solid var(--border);
-    max-width: 90vw;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    max-width: min(280px, 76vw);
   }
   #toast.show { opacity: 1; }
 
@@ -573,19 +829,26 @@ if (window.Cesium) {
     inset: auto 0 0 0;
     z-index: 30;
     display: none;
-    padding: 0 12px calc(env(safe-area-inset-bottom) + 12px);
+    padding: 0 calc(env(safe-area-inset-right) + 12px)
+             calc(env(safe-area-inset-bottom) + 34px)
+             calc(env(safe-area-inset-left) + 12px);
     justify-content: space-between;
     align-items: flex-end;
     pointer-events: none;
   }
   .touch-layer.on { display: flex; }
+  /* One-handed play is impossible if the stick and the pads are on opposite
+     sides, so which side each lives on is a setting. */
+  .touch-layer.righty { flex-direction: row-reverse; }
   .touch-layer > * { pointer-events: auto; }
   #stick {
     width: 114px;
     height: 114px;
     border-radius: 50%;
-    border: 2px solid var(--border);
-    background: rgba(10, 19, 26, 0.75);
+    border: 2px solid rgba(255, 255, 255, 0.22);
+    background: rgba(8, 12, 18, 0.42);
+    backdrop-filter: blur(12px) saturate(1.2);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.45);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -593,28 +856,39 @@ if (window.Cesium) {
     flex: none;
   }
   #stickNub {
-    width: 44px;
-    height: 44px;
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.45);
-    border: 2px solid #fff;
+    background: radial-gradient(circle at 38% 32%,
+                rgba(255,255,255,0.42) 0%, rgba(229, 57, 130, 0.92) 58%);
+    border: 2px solid rgba(255,255,255,0.85);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
     pointer-events: none;
   }
+  /* Every vehicle gets the same two-column, fixed-height grid. Drive used to
+     get a tidy 2x2 while on foot got three different row widths in one
+     cluster. */
   .touch-pads {
     display: grid;
-    grid-template-columns: repeat(2, minmax(62px, auto));
-    gap: 7px;
-    align-items: flex-end;
+    grid-template-columns: repeat(2, 96px);
+    gap: 8px;
+    align-items: stretch;
   }
   .pad-btn {
-    min-width: 62px;
-    padding: 10px 11px;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 8px;
     text-align: center;
-    border-radius: 6px;
-    background: rgba(10, 19, 26, 0.88);
-    border: 1px solid var(--border);
-    font-size: 0.72rem;
+    border-radius: var(--r-surface);
+    background: rgba(10, 14, 20, 0.66);
+    backdrop-filter: blur(14px) saturate(1.2);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.45);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    font-size: 0.82rem;
     font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.9);
     color: #fff;
     touch-action: none;
     user-select: none;
@@ -625,7 +899,7 @@ if (window.Cesium) {
     border-color: var(--accent);
   }
   .pad-btn.wide { grid-column: span 2; }
-  .pad-btn.burn { border-color: var(--burn); color: var(--burn); }
+  .pad-btn.burn { color: var(--burn); }
   .pad-btn.burn.active { background: var(--burn); border-color: var(--burn); color: #0a131a; }
 
   /* Pause Screen */
@@ -633,7 +907,10 @@ if (window.Cesium) {
     position: fixed;
     inset: 0;
     z-index: 45;
-    background: rgba(10, 19, 26, 0.94);
+    /* At 94% the scene's horizon line read straight through as a torn edge
+       across the panel. Blurring what is behind removes the seam. */
+    background: rgba(6, 10, 16, 0.82);
+    backdrop-filter: blur(20px) saturate(0.8);
     display: none;
     flex-direction: column;
     justify-content: center;
@@ -642,7 +919,72 @@ if (window.Cesium) {
     padding: 2rem;
   }
   #pauseMenu.on { display: flex; }
-  #pauseMenu h2 { margin: 0; font-size: 1.4rem; }
+  /* Otherwise the plates ghost through the blur and read as a render bug. */
+  body.paused #topBar,
+  body.paused .touch-layer,
+  body.paused #footBtn,
+  body.paused #boardPrompt,
+  body.paused #objectiveBox { display: none !important; }
+  #pauseMenu > * { width: 100%; max-width: 520px; }
+  #pauseMenu h2 { margin: 0; font-size: 1.4rem; text-align: center; }
+  .pause-selects { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pause-selects .styled-select {
+    flex: 1 1 200px;
+    min-width: 0;
+    /* The one place a browser default was left alone, and it showed. */
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23eef2f5' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    background-size: 12px 8px;
+    padding-right: 36px;
+    text-overflow: ellipsis;
+  }
+  .pause-actions { display: flex; gap: 10px; margin-top: 10px; }
+  .pause-actions > * {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 52px;
+    padding: 0 8px;
+    border-radius: var(--r-pill);
+    font-size: 0.95rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #controlGuide {
+    font-size: 0.76rem;
+    opacity: 0.75;
+    line-height: 1.75;
+    text-align: left;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    background: rgba(19, 36, 49, 0.5);
+  }
+  #controlGuide::before {
+    content: 'KEYS';
+    display: block;
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    opacity: 0.55;
+    margin-bottom: 5px;
+  }
+  #controlGuide kbd {
+    font-family: var(--num);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    background: rgba(255,255,255,0.10);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  /* A list of keyboard shortcuts is dead weight on a touch device. */
+  @media (hover: none) and (pointer: coarse) {
+    #controlGuide { display: none; }
+  }
   #pauseMenu p { margin: 0; max-width: 44ch; text-align: center; font-size: 0.88rem; opacity: 0.8; }
 
   #loginGate {
@@ -672,6 +1014,15 @@ if (window.Cesium) {
     max-width: 380px;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
     text-align: center;
+  }
+  .login-mark {
+    width: 46px; height: 46px;
+    margin: 0 auto 0.55rem;
+    display: block;
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.4;
+    opacity: 0.9;
   }
   .login-card h2 {
     margin: 0 0 0.4rem;
@@ -733,8 +1084,8 @@ if (window.Cesium) {
     font: inherit;
     font-size: 0.95rem;
     font-weight: 700;
-    padding: 13px;
-    border-radius: 7px;
+    padding: 15px;
+    border-radius: var(--r-pill);
     cursor: pointer;
     box-shadow: 0 4px 16px rgba(229, 57, 130, 0.35);
     transition: filter 0.15s ease, transform 0.1s ease;
@@ -742,10 +1093,15 @@ if (window.Cesium) {
   .login-btn:hover { filter: brightness(1.15); }
   .login-btn:active { transform: scale(0.98); }
   .logout-link {
-    font-size: 0.76rem;
-    color: var(--gold);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--paper);
+    opacity: 0.75;
     background: none;
-    border: none;
+    border: 1px solid var(--border);
+    border-radius: var(--r-control);
+    padding: 5px 10px;
+    line-height: 1.35;
     cursor: pointer;
     font-family: inherit;
     padding: 4px 8px;
@@ -790,13 +1146,36 @@ if (window.Cesium) {
   @media (prefers-reduced-motion: reduce) {
     * { transition-duration: 0.01ms !important; }
   }
+  @media (min-width: 1100px) {
+    /* The phone HUD pasted into the corner of a monitor reads as an orphan;
+       above this width both ends of the bar scale together. */
+    #topBar { top: 32px; left: 32px; right: 32px; }
+    #speedPlate, #railPlate { width: 220px; max-width: 300px; padding: 13px 16px; }
+    .speed-num { font-size: 3.25rem; }
+    .speed-unit { font-size: 1rem; }
+    .stat-row { font-size: 0.76rem; }
+    .stat-row b { font-size: 1rem; }
+    .hud-context { font-size: 0.84rem; }
+    .icon-btn { width: 56px; height: 56px; border-radius: var(--r-surface); }
+    .icon-btn svg { width: 24px; height: 24px; }
+    .icon-note { top: 62px; font-size: 0.8rem; }
+  }
+  @media (min-width: 900px) {
+    .login-card { max-width: 520px; padding: 2.8rem 2.6rem; }
+    .login-card h2 { font-size: 2.1rem; letter-spacing: 0.06em; }
+    .login-mark { width: 64px; height: 64px; }
+  }
 </style>
 </head>
 <body>
 
 <div id="loginGate">
   <div class="login-card">
-    <div style="font-size:2.2rem;margin-bottom:0.4rem;">🌐</div>
+    <svg class="login-mark" viewBox="0 0 48 48" aria-hidden="true">
+      <circle cx="24" cy="24" r="19"/>
+      <ellipse cx="24" cy="24" rx="8" ry="19"/>
+      <path d="M5 24h38M8.5 14h31M8.5 34h31"/>
+    </svg>
     <h2>Atlas 3D Explorer</h2>
     <p>Sign in to launch the simulation.</p>
 
@@ -816,45 +1195,45 @@ if (window.Cesium) {
   </div>
 </div>
 
+<div id="launchDock">
+  <div class="dock-inner">
+    <button class="btn-go" id="dockStartBtn" type="button">Drop in now</button>
+  </div>
+</div>
+
 <div id="launcher">
   <div class="container">
     <header>
       <div class="brand">
-        <h1>Atlas 3D <span class="badge">Satellite Ready</span></h1>
-        <button class="logout-link" id="logoutBtn" type="button">Sign out</button>
+        <h1>Atlas 3D Explorer</h1>
+        <div class="brand-actions">
+          <span class="badge">Satellite Ready</span>
+          <button class="logout-link" id="logoutBtn" type="button">Sign out</button>
+        </div>
       </div>
       <p>Drive, fly, and ride the rails through real-world 3D terrain and buildings. Drive close to a subway line and you can board it.</p>
     </header>
 
+    <div class="place-hero" id="placeLine">Coney Island (Surf Ave)</div>
     <div class="readout" id="coordDisplay">40.5755<span>, </span>-73.9805</div>
-    <div id="placeLine">Coney Island (Surf Ave)</div>
 
     <h2>1. Choose a location</h2>
-    <div class="select-row">
-      <div class="search-wrap" style="margin-bottom:8px;">
-        <input class="search-input" id="menuSearch" type="search" autocomplete="off"
-               placeholder="Search anywhere on Earth — city, landmark, or lat, lon">
-        <div class="search-list" id="menuSearchList"></div>
-      </div>
-      <select class="styled-select" id="launcherCitySelect" aria-label="World locations"></select>
+    <div class="search-wrap">
+      <input class="search-input" id="menuSearch" type="search" autocomplete="off"
+             placeholder="Search anywhere">
+      <div class="search-list" id="menuSearchList"></div>
     </div>
     <div class="grid" id="placeGrid"></div>
-    <div class="input-row">
-      <input type="text" id="customInput" placeholder="Enter latitude, longitude (e.g. 40.7549, -73.9840)">
-      <button class="btn-ghost" id="useCustomBtn" type="button">Use coordinates</button>
-    </div>
+    <button class="btn-link" id="moreCitiesBtn" type="button">Show all locations</button>
 
     <h2>2. Choose a vehicle</h2>
-    <div class="select-row">
-      <select class="styled-select" id="launcherVehicleSelect" aria-label="Vehicle models"></select>
-    </div>
     <div class="grid" id="vehicleGrid"></div>
 
     <h2>3. Layer on an adventure</h2>
     <div class="grid" id="advGrid"></div>
 
     <div class="action-bar">
-      <button class="btn-go" id="startBtn" type="button">🚀 Drop in now</button>
+      <button class="btn-go" id="startBtn" type="button">Drop in now</button>
       <span class="hint" id="launchHint">Spawns on the street.</span>
     </div>
 
@@ -882,6 +1261,7 @@ if (window.Cesium) {
 
 <div id="simUI">
   <div id="cesium"></div>
+  <div id="speedVeil"></div>
   <div id="tunnelVeil"></div>
   <div id="tunnelTag">IN TUNNEL</div>
 
@@ -892,41 +1272,34 @@ if (window.Cesium) {
   </div>
 
   <div id="topBar">
-    <div class="hud-row">
-      <div class="hud-selector-bar">
-        <select class="hud-select" id="inGameCitySelect" aria-label="Jump to location"></select>
-        <select class="hud-select" id="inGameVehicleSelect" aria-label="Change vehicle"></select>
+    <div class="hud-plate" id="speedPlate">
+      <div class="speed-line"><span class="speed-num" id="speedVal">0</span><span class="speed-unit">km/h</span></div>
+      <div class="stat-row" id="altRow"><span>Altitude</span><b id="altVal">0</b></div>
+      <div class="stat-row" id="machStat"><span>Mach</span><b id="machVal">0.00</b></div>
+      <div id="flyStrip">
+        <div class="stat-row"><span>Throttle</span><b id="throtVal">75</b></div>
+        <div class="meter" id="throtMeter"><i></i></div>
+        <div class="stat-row" id="burnLabel"><span>Burner</span><b id="burnVal">100</b></div>
+        <div class="meter" id="burnMeter"><i></i></div>
       </div>
+      <div class="hud-context" id="hudContext">—</div>
     </div>
 
-    <div class="hud-row">
-      <div>
-        <div class="hud-plate coord-info">
-          <div><b id="latVal">—</b> lat</div>
-          <div><b id="lonVal">—</b> lon</div>
-        </div>
-        <div class="hud-plate" id="railPlate">
-          <div id="railLine">—</div>
-          <div id="railNext">—</div>
-        </div>
-      </div>
-      <div class="hud-controls">
-        <button class="hud-btn" id="camSwitchBtn" type="button">Cam: Chase</button>
-        <button class="hud-btn" id="recoverBtn" type="button">Recover</button>
-        <button class="hud-btn" id="footBtn" type="button" style="display:none">Get out</button>
-        <button class="hud-btn" id="pauseBtn" type="button">Pause</button>
-      </div>
-      <div class="hud-plate" id="speedPlate">
-        <div><span class="speed-num" id="speedVal">0</span><span class="speed-unit">km/h</span></div>
-        <div class="sub-stat"><span id="altVal">0</span>m agl</div>
-        <div class="sub-stat" id="machStat">M 0.00</div>
-        <div id="flyStrip">
-          <div class="sub-stat" style="text-align:left;">Throttle <span id="throtVal">75</span>%</div>
-          <div class="meter" id="throtMeter"><i></i></div>
-          <div class="sub-stat" id="burnLabel" style="text-align:left;">Burner</div>
-          <div class="meter" id="burnMeter"><i></i></div>
-        </div>
-      </div>
+    <div class="hud-plate" id="railPlate">
+      <div id="railLine">—</div>
+      <div id="railNext">—</div>
+    </div>
+
+    <div class="hud-rail">
+      <button class="icon-btn" id="camSwitchBtn" type="button" aria-label="Change camera" title="Camera">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.4"/></svg>
+      </button>
+      <button class="icon-btn" id="recoverBtn" type="button" aria-label="Recover" title="Recover">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4.5h-4.5"/></svg>
+      </button>
+      <button class="icon-btn" id="pauseBtn" type="button" aria-label="Pause" title="Pause">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg>
+      </button>
     </div>
   </div>
 
@@ -934,6 +1307,11 @@ if (window.Cesium) {
     <div style="font-size:0.68rem;opacity:0.6;font-family:monospace;font-weight:700;" id="objTitle"></div>
     <div id="objDesc"></div>
   </div>
+
+  <button id="footBtn" type="button">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="4.6" r="2.1"/><path d="M12 8v5m0 0-3 7m3-7 3 7M8 10.5l4-2 4 2"/></svg>
+    <span id="footNote">Get out</span>
+  </button>
 
   <div id="boardPrompt">
     <div id="boardText"></div>
@@ -959,20 +1337,26 @@ if (window.Cesium) {
 
     <div class="search-wrap">
       <input class="search-input" id="gameSearch" type="search" autocomplete="off"
-             placeholder="Go anywhere — city, landmark, or lat, lon">
+             placeholder="Go anywhere">
       <div class="search-list" id="gameSearchList"></div>
+    </div>
+
+    <div class="pause-selects">
+      <select class="styled-select" id="inGameCitySelect" aria-label="Jump to location"></select>
+      <select class="styled-select" id="inGameVehicleSelect" aria-label="Change vehicle"></select>
     </div>
 
     <div class="pause-settings">
       <button class="hud-btn" id="qualityBtn" type="button">Quality: Auto</button>
       <button class="hud-btn" id="roadBtn" type="button">Roads: Assist</button>
+      <button class="hud-btn" id="handBtn" type="button">Stick: Left</button>
       <button class="hud-btn" id="shareBtn" type="button">Copy share link</button>
     </div>
 
-    <div style="font-family:monospace;font-size:0.8rem;opacity:0.75;text-align:center;line-height:1.8;" id="controlGuide"></div>
-    <div style="display:flex;gap:10px;margin-top:10px;">
+    <div id="controlGuide"></div>
+    <div class="pause-actions">
       <button class="btn-go" id="resumeBtn" type="button">Resume</button>
-      <button class="btn-ghost" id="exitBtn" type="button">Change location</button>
+      <button class="btn-ghost" id="exitBtn" type="button">Relocate</button>
     </div>
   </div>
 </div>
@@ -1350,15 +1734,16 @@ function updateCoordDisplay() {
   else $('launchHint').textContent = 'Spawns on the street. Drive near a rail line to board it.';
 }
 
-function buildCityOptions(includePlaceholder) {
-  var html = includePlaceholder ? '<option value="" disabled selected>📍 Jump to location…</option>' : '';
+function buildCityOptions(includePlaceholder, shortLabels) {
+  var html = includePlaceholder ? '<option value="" disabled selected>Jump to location…</option>' : '';
   CITY_GROUP_ORDER.forEach(function(g) {
     var members = [];
     CITIES.forEach(function(c, i) { if (c.group === g) members.push({ c: c, i: i }); });
     if (!members.length) return;
     html += '<optgroup label="' + g + '">';
     members.forEach(function(m) {
-      html += '<option value="' + m.i + '">' + m.c.name + ' — ' + m.c.region + '</option>';
+      html += '<option value="' + m.i + '">' +
+        (shortLabels ? m.c.name : m.c.name + ' — ' + m.c.region) + '</option>';
     });
     html += '</optgroup>';
   });
@@ -1366,29 +1751,45 @@ function buildCityOptions(includePlaceholder) {
 }
 
 function initMenu() {
-  $('launcherCitySelect').innerHTML = buildCityOptions(false);
-  $('inGameCitySelect').innerHTML = buildCityOptions(true);
+  $('inGameCitySelect').innerHTML = buildCityOptions(true, true);
 
-  var vehicleOptions = Object.keys(VEHICLES).map(function(id) {
-    var v = VEHICLES[id];
-    var icon = v.kind === 'fly' ? '✈️ ' : (v.kind === 'train' ? '🚇 '
-             : (v.kind === 'foot' ? '🚶 ' : '🚗 '));
-    return '<option value="' + id + '">' + icon + v.label + ' (' + v.note + ')</option>';
-  }).join('');
+  var vehicleOptions = function(short) {
+    return Object.keys(VEHICLES).map(function(id) {
+      var v = VEHICLES[id];
+      return '<option value="' + id + '">' +
+        (short ? v.label : v.label + ' (' + v.note + ')') + '</option>';
+    }).join('');
+  };
 
-  $('launcherVehicleSelect').innerHTML = vehicleOptions;
-  $('inGameVehicleSelect').innerHTML = vehicleOptions;
+  $('inGameVehicleSelect').innerHTML = vehicleOptions(true);
 
-  $('launcherCitySelect').onchange = function(e) { selectCity(+e.target.value); };
-  $('launcherVehicleSelect').onchange = function(e) { selectVehicle(e.target.value); };
+
+
   $('inGameCitySelect').onchange = function(e) { warpToCity(+e.target.value); };
   $('inGameVehicleSelect').onchange = function(e) { changeVehicleInGame(e.target.value); };
 
+  // The grid is the only location picker now, so it has to be able to reach
+  // every curated city — but eight is what fits before the Launch button
+  // disappears off the bottom of a phone.
   var featuredCount = 8;
-  $('placeGrid').innerHTML = CITIES.slice(0, featuredCount).map(function(p, i) {
-    return '<button class="card ' + (i === 0 ? 'on' : '') + '" data-idx="' + i + '" type="button">' +
-      '<b>' + p.name + '</b><em>' + p.lat.toFixed(2) + ', ' + p.lon.toFixed(2) + '</em></button>';
-  }).join('');
+  var showAllCities = false;
+
+  function renderPlaceGrid() {
+    var list = showAllCities ? CITIES : CITIES.slice(0, featuredCount);
+    $('placeGrid').innerHTML = list.map(function(p, i) {
+      var on = Math.abs(p.lat - sel.place.lat) < 1e-6 && Math.abs(p.lon - sel.place.lon) < 1e-6;
+      return '<button class="card ' + (on ? 'on' : '') + '" data-idx="' + i + '" type="button">' +
+        '<b>' + p.name + '</b><em>' + p.lat.toFixed(2) + ', ' + p.lon.toFixed(2) + '</em></button>';
+    }).join('');
+    $('moreCitiesBtn').textContent = showAllCities
+      ? 'Show fewer' : 'Show all ' + CITIES.length + ' locations';
+  }
+  window.renderPlaceGrid = renderPlaceGrid;
+  renderPlaceGrid();
+  $('moreCitiesBtn').onclick = function() {
+    showAllCities = !showAllCities;
+    renderPlaceGrid();
+  };
   $('placeGrid').onclick = function(e) {
     var card = e.target.closest('.card'); if (!card) return;
     selectCity(+card.dataset.idx);
@@ -1421,20 +1822,6 @@ function initMenu() {
     updateCoordDisplay();
   };
 
-  $('useCustomBtn').onclick = function() {
-    var val = $('customInput').value.trim();
-    var match = val.match(/(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)/);
-    if (!match) { $('customInput').value = ''; $('customInput').placeholder = 'Enter two numbers, e.g. 40.7549, -73.9840'; return; }
-    var la = +match[1], lo = +match[2];
-    if (la < -90 || la > 90 || lo < -180 || lo > 180) {
-      $('customInput').value = ''; $('customInput').placeholder = 'Latitude −90…90, longitude −180…180';
-      return;
-    }
-    sel.place = { name: 'Custom coordinates', region: la.toFixed(4) + ', ' + lo.toFixed(4), lat: la, lon: lo, heading: 0 };
-    Array.prototype.forEach.call($('placeGrid').children, function(c) { c.classList.remove('on'); });
-    updateCoordDisplay();
-  };
-
   $('saveTokenBtn').onclick = function() {
     var t = $('tokenField').value.trim();
     try {
@@ -1450,7 +1837,6 @@ function initMenu() {
   wireSearch('menuSearch', 'menuSearchList', function(r) {
     sel.place = { name: r.name, region: r.region || 'searched', group: 'New York',
                   lat: r.lat, lon: r.lon, heading: 0 };
-    $('launcherCitySelect').value = '';
     Array.prototype.forEach.call($('placeGrid').children, function(c) { c.classList.remove('on'); });
     updateCoordDisplay();
     showToast('Set to ' + r.name);
@@ -1466,7 +1852,6 @@ function selectCity(idx) {
   var p = CITIES[idx];
   if (!p) return;
   sel.place = p;
-  $('launcherCitySelect').value = idx;
   Array.prototype.forEach.call($('placeGrid').children, function(c) {
     c.classList.toggle('on', +c.dataset.idx === idx);
   });
@@ -1476,7 +1861,6 @@ function selectCity(idx) {
 function selectVehicle(vehId) {
   if (!VEHICLES[vehId]) return;
   sel.vehicle = vehId;
-  $('launcherVehicleSelect').value = vehId;
   Array.prototype.forEach.call($('vehicleGrid').children, function(c) {
     c.classList.toggle('on', c.dataset.id === vehId);
   });
@@ -1900,6 +2284,7 @@ async function startEngine() {
     var groundHeight = await probeTerrainHeight(sel.place.lat, sel.place.lon);
 
     initVehicleRig(groundHeight);
+    ensureShadowEntity();
     initInputControls();
 
     $('inGameVehicleSelect').value = sel.vehicle;
@@ -2452,6 +2837,25 @@ var ROAD_MODES = [
   { id: 'locked', label: 'Locked', pull: 1.0,  maxDist: 90 }
 ];
 var roadModeIdx = 1;
+var stickRight = false;
+
+function loadHandPref() {
+  try { stickRight = localStorage.getItem('atlas_stick') === 'right'; } catch (e) {}
+}
+
+function applyHandPref() {
+  var layer = $('touchControls');
+  if (layer) layer.classList.toggle('righty', stickRight);
+  var b = $('handBtn');
+  if (b) b.textContent = 'Stick: ' + (stickRight ? 'Right' : 'Left');
+}
+
+function cycleHand() {
+  stickRight = !stickRight;
+  try { localStorage.setItem('atlas_stick', stickRight ? 'right' : 'left'); } catch (e) {}
+  applyHandPref();
+  showToast('Stick on the ' + (stickRight ? 'right' : 'left'));
+}
 
 function roadMode() { return ROAD_MODES[roadModeIdx]; }
 
@@ -2802,6 +3206,71 @@ function initVehicleRig(groundH) {
   if (sel.adventure && sel.adventure.objectives) initAdventure(sel.adventure);
 }
 
+/* A vehicle with no contact shadow reads as a sticker pasted on the ground
+   rather than an object standing on it — and it is worse over photography,
+   where everything around it already has baked lighting. A soft radial decal
+   under the chassis is cheap and fixes the read entirely. */
+var shadowEntity = null;
+var shadowTexture = null;
+
+function contactShadowTexture() {
+  if (shadowTexture) return shadowTexture;
+  var size = 128;
+  var c = document.createElement('canvas');
+  c.width = c.height = size;
+  var g = c.getContext('2d');
+  var grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, 'rgba(0,0,0,0.78)');
+  grad.addColorStop(0.40, 'rgba(0,0,0,0.52)');
+  grad.addColorStop(0.72, 'rgba(0,0,0,0.18)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+  shadowTexture = c;
+  return shadowTexture;
+}
+
+function ensureShadowEntity() {
+  if (shadowEntity || !viewer) return;
+  shadowEntity = viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(0, 0, 0),
+    ellipse: {
+      semiMinorAxis: new Cesium.ConstantProperty(2),
+      semiMajorAxis: new Cesium.ConstantProperty(3),
+      material: new Cesium.ImageMaterialProperty({
+        image: contactShadowTexture(),
+        transparent: true
+      }),
+      height: new Cesium.ConstantProperty(0),
+      show: false
+    }
+  });
+}
+
+function updateContactShadow() {
+  if (!shadowEntity || !simState) return;
+  var spec = simState.spec;
+  var agl = simState.height - simState.ground;
+  // Fades out as the vehicle leaves the ground, and never shows for a train
+  // on a viaduct or a walker with no body to cast one.
+  var grounded = (spec.kind === 'drive') && agl < 6;
+  shadowEntity.ellipse.show = grounded;
+  if (!grounded) return;
+
+  var dims = chassisFor(sel.vehicle, spec);
+  var lift = Math.max(0, 1 - agl / 6);
+  shadowEntity.ellipse.semiMajorAxis = new Cesium.ConstantProperty(dims.y * 0.62);
+  shadowEntity.ellipse.semiMinorAxis = new Cesium.ConstantProperty(dims.x * 0.78);
+  shadowEntity.ellipse.material = new Cesium.ImageMaterialProperty({
+    image: contactShadowTexture(),
+    transparent: true,
+    color: Cesium.Color.WHITE.withAlpha(0.45 + 0.55 * lift)
+  });
+  shadowEntity.position = Cesium.Cartesian3.fromRadians(
+    simState.lon, simState.lat, simState.ground + 0.05);
+  shadowEntity.ellipse.height = new Cesium.ConstantProperty(simState.ground + 0.05);
+}
+
 function chassisFor(vehId, spec) {
   if (spec.kind === 'foot') return new Cesium.Cartesian3(0.5, 0.4, 1.75);
   if (spec.kind === 'train') return new Cesium.Cartesian3(3.2, 19.5, 3.4);
@@ -2861,6 +3330,7 @@ function changeVehicleInGame(newVehId) {
 
   sel.vehicle = newVehId;
   simState.spec = newSpec;
+  $('inGameVehicleSelect').value = newVehId;
   if (newSpec.kind === 'drive') lastRoadVehicle = newVehId;
   // Choosing a vehicle from the menu is not walking back to the one you
   // parked, so that car is gone rather than left as a phantom waypoint.
@@ -3109,13 +3579,7 @@ function parseDeepLink() {
 function applyDeepLink() {
   var d = parseDeepLink();
   if (!d) return false;
-  if (d.place) {
-    sel.place = d.place;
-    // A linked spot is not in CITIES, so drop the dropdown's selection
-    // rather than leaving it pointing at an unrelated city.
-    var sels = $('launcherCitySelect');
-    if (sels) sels.value = '';
-  }
+  if (d.place) sel.place = d.place;
   if (d.vehicle) sel.vehicle = d.vehicle;
   deepLinkAutoStart = !!d.go;
   return true;
@@ -3374,8 +3838,8 @@ function recoverVehicle() {
    own car is the thing this mode is actually for.
    ──────────────────────────────────────────────────────────── */
 var FOOT_CAM_VIEWS = [
-  { id: 'eyes',  label: 'First Person', dist: 0.02, up: 0.82, pitch: -0.03 },
-  { id: 'drone', label: 'Drone',        dist: 7.5,  up: 3.4,  pitch: -0.26 }
+  { id: 'eyes',  label: 'First person', dist: 0.02, up: 0.82, pitch: -0.02 },
+  { id: 'drone', label: 'Drone',        dist: 6.5,  up: 2.8,  pitch: -0.16 }
 ];
 
 var parked = null;   // { vehId, lat, lon, heading, ground } while on foot
@@ -3439,22 +3903,29 @@ function canEnterVehicle() {
   return onFoot() && !!parked && metersToParked() <= FOOT_REACH && !transition;
 }
 
+var footBtnState = '';
+
 function updateFootButton() {
   var b = $('footBtn');
+  var note = $('footNote');
   if (!b) return;
-  if (canExitVehicle()) { b.style.display = ''; b.textContent = 'Get out'; b.disabled = false; }
+  var setBtn = function(show, label, disabled, text) {
+    var key = (show ? 1 : 0) + '|' + (disabled ? 1 : 0) + '|' + text + '|' + label;
+    if (key === footBtnState) return;
+    footBtnState = key;
+    b.classList.toggle('on', !!show);
+    b.disabled = !!disabled;
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    if (note) note.textContent = text || '';
+  };
+  if (canExitVehicle()) setBtn(true, 'Get out and walk', false, 'Get out');
   else if (onFoot() && parked) {
-    b.style.display = '';
     var d = metersToParked();
-    if (d <= FOOT_REACH) { b.textContent = 'Get in'; b.disabled = false; }
-    else { b.textContent = Math.round(d) + ' m to car'; b.disabled = true; }
-  } else if (onFoot()) {
-    b.style.display = '';
-    b.textContent = 'No car';
-    b.disabled = true;
-  } else {
-    b.style.display = 'none';
-  }
+    if (d <= FOOT_REACH) setBtn(true, 'Get back in the car', false, 'Get in');
+    else setBtn(true, 'Walk back to the car', true, Math.round(d) + ' m to car');
+  } else if (onFoot()) setBtn(true, 'No car parked nearby', true, 'No car nearby');
+  else setBtn(false, '', true, '');
 }
 
 function exitVehicle() {
@@ -3519,7 +3990,9 @@ function toggleFoot() {
 }
 
 function updateCamButton() {
-  $('camSwitchBtn').textContent = 'Cam: ' + activeCam().label;
+  var label = 'Camera: ' + activeCam().label;
+  $('camSwitchBtn').title = label;
+  $('camSwitchBtn').setAttribute('aria-label', label);
 }
 
 function warpToCity(cityIdx) {
@@ -3822,10 +4295,18 @@ var touchInput = {
   steer: 0, throttle: 0, elevator: 0, yaw: 0, collective: 0,
   brake: false, drift: false, burn: false, throtUp: false, throtDown: false
 };
+/* Pitch sets where the horizon lands: at 60° vertical FOV, -0.20 rad put it
+   about a third of the way down and filled the bottom of the frame with empty
+   ground. These aim flatter and sit closer, so the vehicle has presence and
+   the city — the reason the product exists — gets the frame. */
+/* `side` offsets the camera off the centreline so the vehicle is seen three
+   quarter rather than as a flat rear elevation. Chase and Wide used to
+   produce near-identical frames; Wide is now a low hero angle instead of a
+   higher version of the same shot. */
 var CAM_VIEWS = [
-  { id: 'chase', label: 'Chase (Rear)', dist: 13.5, up: 4.2, pitch: -0.20 },
-  { id: 'cockpit', label: 'Bumper / Hood', dist: -1.2, up: 1.3, pitch: -0.05 },
-  { id: 'wide', label: 'Wide Aerial', dist: 32, up: 13, pitch: -0.34 }
+  { id: 'chase', label: 'Chase', dist: 8.8, up: 3.0, pitch: -0.11, side: 1.6 },
+  { id: 'cockpit', label: 'Hood', dist: -2.6, up: 1.08, pitch: -0.03, side: 0 },
+  { id: 'wide', label: 'Hero', dist: 15, up: 1.9, pitch: 0.02, side: 6.5 }
 ];
 var curCamIdx = 0;
 
@@ -3849,6 +4330,7 @@ function initInputControls() {
   $('recoverBtn').onclick = recoverVehicle;
   $('footBtn').onclick = toggleFoot;
   $('shareBtn').onclick = copyShareLink;
+  $('handBtn').onclick = cycleHand;
   wireSearch('gameSearch', 'gameSearchList', function(r) {
     togglePause(false);
     warpToPlace({ name: r.name, region: r.region, group: 'New York',
@@ -3862,6 +4344,7 @@ function initInputControls() {
 
   if (('ontouchstart' in window) || navigator.maxTouchPoints > 0) {
     $('touchControls').classList.add('on');
+    applyHandPref();
     setupTouchStick();
     setupTouchPads();
   }
@@ -3871,7 +4354,7 @@ function cycleCam() {
   curCamIdx = (curCamIdx + 1) % camViews().length;
   updateCamButton();
   applyVehicleVisibility();
-  showToast('Camera: ' + activeCam().label);
+  showToast(activeCam().label);
 }
 
 function cycleRailLine() {
@@ -3952,7 +4435,7 @@ function setupTouchPads() {
       '<div class="pad-btn" data-act="gas">Walk ⇧</div>' +
       '<div class="pad-btn" data-act="drift">Run</div>' +
       '<div class="pad-btn" data-act="rev">Back ⇩</div>' +
-      '<div class="pad-btn wide" data-act="foot">Get in / out</div>';
+      '<div class="pad-btn" data-act="foot">Car</div>';
   } else if (kind === 'drive') {
     pads.innerHTML =
       '<div class="pad-btn" data-act="gas">Gas ⇧</div>' +
@@ -3967,14 +4450,20 @@ function setupTouchPads() {
       '<div class="pad-btn" data-act="switch">Switch ⇄</div>';
   } else {
     var burnPad = simState.spec.afterburner
-      ? '<div class="pad-btn wide burn" data-act="burn">🔥 Afterburner</div>' : '';
+      ? '<div class="pad-btn wide burn" data-act="burn">Afterburner</div>' : '';
+    // The stick's vertical axis is already pitch for aircraft, so Climb and
+    // Descend are only worth a pad on a helicopter, where collective is the
+    // primary control. Dropping them takes the jet from seven pads to five.
+    var liftPads = (simState.spec.climb && !simState.spec.afterburner)
+      ? '<div class="pad-btn" data-act="climb">Climb ⇡</div>' +
+        '<div class="pad-btn" data-act="descend">Descend ⇣</div>'
+      : '';
     pads.innerHTML =
-      '<div class="pad-btn" data-act="climb">Climb ⇡</div>' +
-      '<div class="pad-btn" data-act="descend">Descend ⇣</div>' +
-      '<div class="pad-btn" data-act="rudL">Rud ⇦</div>' +
-      '<div class="pad-btn" data-act="rudR">Rud ⇨</div>' +
-      '<div class="pad-btn" data-act="thrDown">Thr −</div>' +
-      '<div class="pad-btn" data-act="thrUp">Thr +</div>' +
+      liftPads +
+      '<div class="pad-btn" data-act="rudL">Rudder ◀</div>' +
+      '<div class="pad-btn" data-act="rudR">Rudder ▶</div>' +
+      '<div class="pad-btn" data-act="thrDown">Throttle −</div>' +
+      '<div class="pad-btn" data-act="thrUp">Throttle +</div>' +
       burnPad;
   }
 
@@ -4069,7 +4558,7 @@ function gameLoop(now) {
 
     if (frameTick % 6 === 0 && !onFoot()) { scanForRail(); updateBoardPrompt(); }
     if (frameTick % 30 === 0) updateTileDetail();
-    if (frameTick % 15 === 0) updateFootButton();
+    updateFootButton();
     syncDeepLink(now);
     if (frameTick % 45 === 0 && simState.spec.kind !== 'fly') {
       osmMaintain(Cesium.Math.toDegrees(simState.lat), Cesium.Math.toDegrees(simState.lon));
@@ -4077,6 +4566,7 @@ function gameLoop(now) {
     updateAutoQuality(now);
 
     updateSimRender();
+    updateSpeedFeel();
     checkAdventure(dt);
     updateHUD();
   } catch (err) {
@@ -4314,6 +4804,19 @@ function stepFlight(input, dt) {
   updateTunnelVeil(1);
 }
 
+/* Nothing in a still frame said "moving". A little FOV stretch plus a vignette
+   that tightens with speed does, and both are free. */
+function updateSpeedFeel() {
+  if (!scene || !simState) return;
+  var kmh = Math.abs(simState.speed) * 3.6;
+  var v = $('speedVeil');
+  if (v) v.style.opacity = Math.min(0.55, kmh / 420).toFixed(3);
+  if (simState.spec.kind === 'fly') return;   // the burner owns FOV in the air
+  if (scene.camera.frustum.fov === undefined) return;
+  var stretch = Math.min(11, kmh / 14);
+  scene.camera.frustum.fov = Cesium.Math.toRadians(BASE_FOV + stretch);
+}
+
 function applyBurnerCamera() {
   if (!scene) return;
   var mix = simState.burnMix || 0;
@@ -4389,6 +4892,7 @@ function updateSimRender() {
   var hpr = new Cesium.HeadingPitchRoll(simState.heading - Math.PI / 2, simState.pitch, simState.roll);
   vehicleEntity.orientation = Cesium.Transforms.headingPitchRollQuaternion(pos, hpr);
   updateVehicleModelPose(pos);
+  updateContactShadow();
   applyVehicleVisibility();
 
   if (simState.spec.kind === 'train' && trailerEntities.length) {
@@ -4410,17 +4914,19 @@ function updateSimRender() {
 
   var cam = activeCam();
   var enuMat = Cesium.Transforms.eastNorthUpToFixedFrame(pos);
+  var side = cam.side || 0;
   var localOffset = new Cesium.Cartesian3(
-    -Math.sin(simState.heading) * cam.dist,
-    -Math.cos(simState.heading) * cam.dist,
+    -Math.sin(simState.heading) * cam.dist + Math.cos(simState.heading) * side,
+    -Math.cos(simState.heading) * cam.dist - Math.sin(simState.heading) * side,
     cam.up
   );
   var eyePos = Cesium.Matrix4.multiplyByPoint(enuMat, localOffset, new Cesium.Cartesian3());
 
+  var aimShift = (cam.dist > 0.5) ? Math.atan2(side, cam.dist) : 0;
   scene.camera.setView({
     destination: eyePos,
     orientation: {
-      heading: simState.heading,
+      heading: simState.heading - aimShift,
       pitch: cam.pitch,
       roll: curCamIdx === 1 ? simState.roll * 0.7 : simState.roll * 0.2
     }
@@ -4429,31 +4935,49 @@ function updateSimRender() {
 
 function updateHUD() {
   var kmh = Math.abs(simState.speed) * 3.6;
-  $('speedVal').textContent = Math.round(kmh);
-  $('latVal').textContent = Cesium.Math.toDegrees(simState.lat).toFixed(4);
-  $('lonVal').textContent = Cesium.Math.toDegrees(simState.lon).toFixed(4);
-  $('altVal').textContent = Math.round(Math.max(0, simState.height - simState.ground));
+  var shown = Math.round(kmh);
+  $('speedVal').textContent = shown;
+  $('speedVal').parentNode.classList.toggle('wide', shown >= 1000);
 
   var isFly = simState.spec.kind === 'fly';
   var isTrain = simState.spec.kind === 'train';
+  var agl = Math.round(Math.max(0, simState.height - simState.ground));
+
+  // Altitude is meaningful in the air and on the rails; a car is always at
+  // zero, so the row just went away rather than reading "0m agl" forever.
+  $('altRow').style.display = (isFly || isTrain) ? 'flex' : 'none';
+  $('altVal').textContent = agl + ' m';
 
   $('flyStrip').style.display = isFly ? 'block' : 'none';
-  $('machStat').style.display = (isFly && simState.spec.afterburner) ? 'block' : 'none';
+  $('machStat').style.display = (isFly && simState.spec.afterburner) ? 'flex' : 'none';
   $('railPlate').style.display = isTrain ? 'block' : 'none';
 
+  positionToast();
+
+  var ctx = $('hudContext');
+  if (ctx) {
+    ctx.innerHTML = '<b></b><span></span>';
+    ctx.firstElementChild.textContent = simState.spec.label;
+    ctx.lastElementChild.textContent =
+      Cesium.Math.toDegrees(simState.lat).toFixed(3) + ', ' +
+      Cesium.Math.toDegrees(simState.lon).toFixed(3);
+  }
+
   if (isFly) {
-    $('throtVal').textContent = Math.round(simState.throttle * 100);
+    $('throtVal').textContent = Math.round(simState.throttle * 100) + '%';
     $('throtMeter').firstElementChild.style.width = (simState.throttle * 100) + '%';
     if (simState.spec.afterburner) {
       $('burnMeter').firstElementChild.style.width = simState.burn + '%';
       var cooling = simState.burnLock > 0 || !simState.burnReady;
       $('burnMeter').classList.toggle('dry', cooling);
-      $('burnLabel').textContent = cooling ? 'Burner cooling' :
+      $('burnLabel').firstElementChild.textContent = cooling ? 'Cooling' :
         (simState.burnMix > 0.1 ? 'Burner lit' : 'Burner');
-      $('machStat').textContent = 'M ' + (Math.abs(simState.speed) / 343).toFixed(2);
+      $('burnVal').textContent = Math.round(simState.burn) + '%';
+      $('machVal').textContent = (Math.abs(simState.speed) / 343).toFixed(2);
     } else {
       $('burnMeter').firstElementChild.style.width = '0%';
-      $('burnLabel').textContent = 'No burner';
+      $('burnLabel').firstElementChild.textContent = 'Burner';
+      $('burnVal').textContent = '—';
     }
   }
 
@@ -4465,14 +4989,45 @@ function updateHUD() {
       : nodes[Math.min(nodes.length - 1, trainTrackState.segIndex + 1)];
     var pt = railPoint(trainTrackState.lineIndex, trainTrackState.segIndex, trainTrackState.segT);
     $('railLine').textContent = line.name;
-    $('railNext').textContent = 'Next: ' + nextNode.s + '  ·  ' +
-      (pt.h < -1 ? 'tunnel' : (pt.h > 3 ? 'elevated ' + Math.round(pt.h) + 'm' : 'surface'));
+    var where = pt.h < -1 ? 'Tunnel'
+              : (pt.h > 3 ? 'Elevated ' + Math.round(pt.h) + ' m' : 'Surface');
+    var row = function(label, value) {
+      var d = document.createElement('div');
+      d.className = 'stat-row';
+      var sp = document.createElement('span'); sp.textContent = label;
+      var bb = document.createElement('b'); bb.textContent = value;
+      d.appendChild(sp); d.appendChild(bb);
+      return d;
+    };
+    $('railNext').innerHTML = '';
+    $('railNext').appendChild(row('Next', nextNode.s));
+    $('railNext').appendChild(row('Track', where));
   }
 }
 
 var toastTimer;
+/* Dock the toast just under whatever the HUD currently occupies. The car's
+   plate is two rows, the jet's is six, and the train adds a second plate that
+   only appears once updateHUD has run — so this is recomputed while the toast
+   is on screen rather than once when it is raised. */
+function positionToast() {
+  var t = $('toast');
+  var bar = $('topBar');
+  if (!t || !bar || !t.classList.contains('show')) return;
+  var lowest = 0;
+  Array.prototype.forEach.call(bar.children, function(c) {
+    if (c.offsetParent === null) return;
+    var r = c.getBoundingClientRect();
+    if (r.height > 0) lowest = Math.max(lowest, r.bottom);
+  });
+  if (lowest > 0) t.style.top = Math.round(lowest + 14) + 'px';
+}
+
 function showToast(txt) {
   var t = $('toast');
+  // Single line only — the old plate wrapped a sentence onto three lines in
+  // the middle of the frame.
+  txt = String(txt).replace(/\s+/g, ' ').trim();
   t.textContent = txt;
   t.classList.add('show');
   clearTimeout(toastTimer);
@@ -4482,31 +5037,34 @@ function showToast(txt) {
 function togglePause(force) {
   isPaused = force === undefined ? !isPaused : force;
   $('pauseMenu').classList.toggle('on', isPaused);
+  // The HUD plates otherwise ghost through the blurred scrim and read as a
+  // render bug rather than a menu.
+  document.body.classList.toggle('paused', isPaused);
   if (!isPaused) { lastTime = performance.now(); return; }
 
   var kind = simState ? simState.spec.kind : 'drive';
   var guide;
+  var k = function(keys, what) {
+    return '<kbd>' + keys + '</kbd> ' + what + '<br>';
+  };
   if (kind === 'foot') {
-    guide = 'W A S D / arrows — walk and turn<br>' +
-            'Shift — run &nbsp;|&nbsp; G — get back in the car<br>' +
-            'B — recover &nbsp;|&nbsp; C — camera &nbsp;|&nbsp; P — resume';
+    guide = k('W A S D', 'walk and turn') + k('Shift', 'run') +
+            k('G', 'get back in the car') + k('B', 'recover') +
+            k('C', 'camera') + k('P', 'resume');
   } else if (kind === 'drive') {
-    guide = 'W A S D / arrows — drive and steer<br>' +
-            'Space — brake &nbsp;|&nbsp; Shift — drift<br>' +
-            'E — board a rail line when prompted<br>' +
-            'G — get out and walk &nbsp;|&nbsp; B — recover<br>' +
-            'C — camera &nbsp;|&nbsp; P — resume';
+    guide = k('W A S D', 'drive and steer') + k('Space', 'brake') +
+            k('Shift', 'drift') + k('E', 'board a rail line when prompted') +
+            k('G', 'get out and walk') + k('B', 'recover') +
+            k('C', 'camera') + k('P', 'resume');
   } else if (kind === 'train') {
-    guide = 'W / S / arrows — accelerate and slow<br>' +
-            'Space — train brake &nbsp;|&nbsp; T — switch line<br>' +
-            'E — leave the train when stopped<br>' +
-            'B — recover &nbsp;|&nbsp; C — camera &nbsp;|&nbsp; P — resume';
+    guide = k('W S', 'accelerate and slow') + k('Space', 'train brake') +
+            k('T', 'switch line') + k('E', 'leave the train when stopped') +
+            k('B', 'recover') + k('C', 'camera') + k('P', 'resume');
   } else {
-    guide = 'W S — pitch &nbsp;|&nbsp; A D — roll &nbsp;|&nbsp; J L — rudder<br>' +
-            'R / F — throttle up and down<br>' +
-            'Space / Shift — climb and descend<br>' +
-            (simState && simState.spec.afterburner ? 'X — hold for afterburner<br>' : '') +
-            'B — level off &nbsp;|&nbsp; C — camera &nbsp;|&nbsp; P — resume';
+    guide = k('W S', 'pitch') + k('A D', 'roll') + k('J L', 'rudder') +
+            k('R F', 'throttle up and down') + k('Space / Shift', 'climb and descend') +
+            (simState && simState.spec.afterburner ? k('X', 'hold for afterburner') : '') +
+            k('B', 'level off') + k('C', 'camera') + k('P', 'resume');
   }
   $('controlGuide').innerHTML = guide;
   var layers = [];
@@ -4579,6 +5137,7 @@ function handleLoginAttempt() {
 function unlockApplication() {
   var gate = $('loginGate');
   if (gate) gate.classList.add('hidden');
+  document.body.classList.add('authed');
   waitForCesium().then(function(ok) { if (ok) prewarmPhotoreal(); });
   if (deepLinkAutoStart && !simState) {
     deepLinkAutoStart = false;
@@ -4588,6 +5147,7 @@ function unlockApplication() {
 
 function lockApplication() {
   setAuthSession(false);
+  document.body.classList.remove('authed');
   var gate = $('loginGate');
   if (gate) {
     gate.classList.remove('hidden');
@@ -4609,12 +5169,15 @@ function setupAuth() {
   applyQuality();
   loadRoadPref();
   updateRoadBtn();
+  loadHandPref();
+  applyHandPref();
 
   if (checkAuthSession()) unlockApplication();
   else setTimeout(function() { if ($('loginUser')) $('loginUser').focus(); }, 100);
 }
 
 $('startBtn').onclick = function() { startEngine(); };
+$('dockStartBtn').onclick = function() { startEngine(); };
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function() { setupAuth(); initMenu(); });

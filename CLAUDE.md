@@ -150,6 +150,28 @@ read the camera through `activeCam()` / `camViews()`, never `CAM_VIEWS[curCamIdx
 `enterVehicle()` only works within `FOOT_REACH` (9 m); picking a vehicle from
 the dropdown clears `parked` rather than leaving a phantom waypoint.
 
+## Art direction
+
+Visual work goes through the critic loop in **`CRITIC.md`**: a capture script
+screenshots the app across eleven phone states and five desktop ones, and a
+*separate* critic agent — which writes no code and never reads the diff — scores
+0–10 and returns a ranked issue list. Pass is ≥ 8.5 with zero blocking errors.
+
+Two rules that came out of running it, both learned the hard way:
+
+- **Nothing may render inside the speed plate's box.** Docking the toast under
+  the status bar to stop it shouting put it straight on top of the speed
+  readout. The toast has its own lane at 58% height.
+- **The HUD is absolutely positioned, never flowed.** An earlier flex row let
+  the speed plate get pushed out of its corner whenever the number of buttons
+  changed. The instrument tile owns the top-left, the icon rail owns the
+  top-right, and neither wraps.
+
+The palette is three roles, not six colours: pink (`--accent`) is the only
+action colour, orange (`--gold` / `--burn`) is alert and hot-state only, and
+everything else is the neutral ramp. `--num` (Barlow Condensed) is for values
+only — speed, altitude, coordinates — never for prose.
+
 ## Conventions
 
 - Keep it a single self-contained file. Don't introduce a bundler or split it into
