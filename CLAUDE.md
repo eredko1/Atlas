@@ -68,13 +68,17 @@ Two separate things stop a car driving up a building, and they are independent
 on purpose:
 
 - **`drivePathBlocked()`** probes the surface ~2 m *ahead* of the car; a rise
-  steeper than ~29° is a wall, so the car stops against it. Needs no network.
-  It must stay a *lookahead* — an earlier version sampled under the car's own
-  wheels and could not tell "wall ahead" from "tiles finished loading and the
-  street is higher than I thought", which pinned the car in place forever.
+  steeper than ~29° is a wall, so the car stops against it. It must stay a
+  *lookahead* — an earlier version sampled under the car's own wheels and could
+  not tell "wall ahead" from "tiles finished loading and the street is higher
+  than I thought", which pinned the car in place forever. **It only counts a
+  rise as a wall where there is no street**: a ramp, overpass or bridge sits on
+  a mapped road (within the way's half width + `CLIMB_ROAD_SLACK`), so it is let
+  through. Early versions walled off every overpass. With no street data it
+  stops nothing. `CLIMB_GUARD = false` turns it off.
 - **`applyRoadAssist()`** pulls the car back toward the nearest OSM centreline
   once it is past the kerb. The HUD **Roads** button cycles Free / Assist /
-  Locked (persisted as `atlas_roadmode`).
+  Locked (persisted as `atlas_roadmode`). Default is **Free**.
 
 ## Elevated track
 
@@ -171,6 +175,63 @@ The palette is three roles, not six colours: pink (`--accent`) is the only
 action colour, orange (`--gold` / `--burn`) is alert and hot-state only, and
 everything else is the neutral ramp. `--num` (Barlow Condensed) is for values
 only — speed, altitude, coordinates — never for prose.
+
+## Atlas Next: ideas ported from ZAVOD
+
+The second `<script id="atlas-next">` at the bottom of `index.html` is one object,
+`NX`, ported from the ZAVOD browser game (`eredko1/zavod`). It is still a single
+file with no build step. The main script calls it in four places only:
+`NX.start()` (after the vehicle exists), `NX.update(dt, now)` (each frame, before
+`updateSimRender`), `NX.impact(speed)` (a crash) and `NX.water.attach()` /
+`NX.water.ingest()` (tileset attached / OSM fetch ingested). Each subsystem runs
+in its own try/catch (`guard`), so one bug cannot stop the frame. Keys: **M** radio,
+**N** next song, **H** horn, **Z** day/dusk/night, **V** start/stop the game for
+the current vehicle. The pause menu has Sound / Radio / Time / Game buttons.
+
+- **Water** (`NX.water`, after ZAVOD `tilewater.js`). A `CustomShader` on the
+  Google tileset: a fragment is water when it is flat (face normal vs ellipsoid
+  up via `dFdx/dFdy`), blue/teal and not bright. It gets a depth tint (lightness
+  stands in for ZAVOD's shore-distance proxy: shallow = lighter), scrolling
+  ripple normals, fresnel sky sheen, sun glint and a foam band over shallows.
+  No water map, no extra draw call. Terrain fallback uses Cesium's own
+  `requestWaterMask` + `showWaterEffect`. For the CPU, `osmIngest` splits
+  coastline and water polygons out of the same Overpass reply: land is on the
+  **left** of a coastline way, so a point's side of the nearest segment says
+  water or land (`isWater`, `nearestWater`). The **jet ski** (`water: true`
+  on a `drive` vehicle) keeps a velocity vector apart from its heading so it
+  slides out of turns, and the shore stops it like the climb guard stops a car.
+- **Vehicle FX** (`NX.fx`, after `skidmarks.js`, `waterfx.js`, `vehicledamage.js`).
+  Skid marks are a ring of polylines; particle systems for tyre smoke, jet-ski
+  spray and a smoking engine; damage from impacts above 6 m/s costs top speed
+  (B / Recover repairs); body dives and squats from smoothed longitudinal
+  acceleration.
+- **People and traffic** (`NX.npc`, after `people.js` / `crowd.js` / `npcwalk.js`).
+  A fixed pool of models (people: Cesium Man; cars: the Car Concept already used
+  for the player) walks and drives the OSM street graph in a ring around the
+  player, anywhere on Earth. Models are created once; spawning and despawning
+  only shows and hides them. **Ground height is the expensive call**
+  (`scene.sampleHeight` is a ray cast), so NPCs share a per-frame millisecond
+  budget, measure each sample's real cost, and stay hidden until their first
+  sample. Do not sample NPC heights in the frame loop outside that budget.
+- **Audio and radio** (`NX.audio`, `NX.radio`, after ZAVOD `src/audio` and
+  `coney/radio.js`). Procedural: engine (gear model), tyres, wind, water wash,
+  jet/turbine, footsteps, horn, crash. The radio is ZAVOD's Luna Park Radio on
+  the same wall-clock shuffle (everyone hears the same song), streamed from
+  `https://zavod-chi.vercel.app/assets/audio/radio/`; nothing is stored in this
+  repo. The tracks are by Arkady Sokolov and ZAVOD records no licence for them.
+  The audio context only starts on a key press or click (browser rule).
+- **Time of day** (`NX.time`). The clock sets the sun for sky, terrain and water
+  glint; Google's tiles carry baked daylight, so a post-process grade does the
+  dusk/night look. `&t=day|dusk|night` in the link pins it.
+- **Games** (`NX.game`, after ZAVOD's Uber fares). **Fares** (road vehicles): pick
+  up the passenger, deliver before the clock runs out. **Rings** (aircraft) and
+  **Hoops** (jet ski): run the gates in order. Best scores in `localStorage`.
+
+What was **not** ported: Jolt physics (a wasm engine behind a build-less import
+map, and Atlas has no authored colliders to give it), ZAVOD's authored maps
+(Coney, Rego Park: those are Three.js scenes), and the venue mini-games that need
+authored courts (basketball, skate parks). The Map Lab survey data is ZAVOD's
+own; Atlas gets its world from Google's tiles instead.
 
 ## Conventions
 

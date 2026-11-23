@@ -1249,6 +1249,7 @@ if (window.Cesium) {
     <details>
       <summary>Credits &amp; data sources</summary>
       <p>Road and rail centrelines come from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors, queried live through the Overpass API and licensed under the ODbL. They are what keeps the car on the street and the train on the rails; when Overpass is unreachable the sim falls back to free driving and the built-in station chain.</p>
+      <p>Pedestrians use <a href="https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CesiumMan" target="_blank" rel="noopener">Cesium Man</a> from the Khronos glTF Sample Assets, by Cesium, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY 4.0</a>. Water shading, skid marks, crowds, audio, the radio and the games are ported from the ZAVOD project; the Luna Park Radio tracks are by Arkady Sokolov and stream from the ZAVOD site.</p>
       <p>The road car is <a href="https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CarConcept" target="_blank" rel="noopener">Car Concept</a> from the Khronos glTF Sample Assets, &copy; 2021 Khronos Group, licensed <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY 4.0</a>, itself derived from a public-domain model by Unity Fan.</p>
     </details>
 
@@ -1569,6 +1570,7 @@ var CITY_GROUP_ORDER = ['New York', 'United States', 'Americas', 'Europe', 'Afri
 var VEHICLES = {
   walk:   { label: 'On Foot', note: 'walk the streets', kind: 'foot', topSpeed: 5.4,
             walkSpeed: 1.7, accel: 9, brake: 20, steer: 2.4, ride: 0.92, color: '#cbd5e1' },
+  jetski: { label: 'Jet Ski', note: 'rides the water, slides in turns', kind: 'drive', water: true, topSpeed: 34, accel: 17, brake: 15, steer: 2.1, ride: 0.35, color: '#14b8a6' },
   sedan:  { label: 'Sedan', note: 'fast highway cruiser', kind: 'drive', topSpeed: 65, accel: 24, brake: 38, steer: 1.8, ride: 0.42, color: '#2c3e50' },
   taxi:   { label: 'NYC Taxi', note: 'rapid city cab', kind: 'drive', topSpeed: 62, accel: 23, brake: 36, steer: 1.9, ride: 0.42, color: '#f39c12' },
   sport:  { label: 'Sport Coupe', note: 'hypercar acceleration', kind: 'drive', topSpeed: 110, accel: 44, brake: 58, steer: 2.2, ride: 0.36, color: '#e74c3c' },
@@ -2081,6 +2083,7 @@ function attachPhotoreal(tileset) {
   photoTileset = tileset;
   applyTilesetQuality();
   scene.primitives.add(photoTileset);
+  if (window.NX && NX.water) NX.water.attach(photoTileset);
   isPhotorealActive = true;
   sceneStatus.photoreal = true;
   scene.globe.show = false;
@@ -2135,8 +2138,8 @@ async function buildFallbackScene() {
 
   updateBoot(75, 'Streaming terrain elevations…');
   try {
-    var terrain = await withTimeout(Cesium.createWorldTerrainAsync({ requestVertexNormals: true }), 4000, null);
-    if (terrain) { viewer.terrainProvider = terrain; sceneStatus.terrain = true; }
+    var terrain = await withTimeout(Cesium.createWorldTerrainAsync({ requestVertexNormals: true, requestWaterMask: true }), 4000, null);
+    if (terrain) { viewer.terrainProvider = terrain; sceneStatus.terrain = true; scene.globe.showWaterEffect = true; }
   } catch (e) {
     console.warn('Terrain load failed:', e);
   }
@@ -2306,6 +2309,7 @@ async function startEngine() {
     settleSpawn();
 
     qWarmupUntil = performance.now() + 10000;
+    if (window.NX) NX.start();
     requestAnimationFrame(gameLoop);
 
   } catch (criticalErr) {
@@ -2566,6 +2570,8 @@ function osmOverpassQuery(south, west, north, east) {
   return '[out:json][timeout:25];(' +
     'way["highway"~"' + OSM_ROAD_RE + '"](' + bbox + ');' +
     'way["railway"~"' + OSM_RAIL_RE + '"](' + bbox + ');' +
+    'way["natural"~"^(coastline|water)$"](' + bbox + ');' +
+    'way["waterway"="riverbank"](' + bbox + ');' +
     ');out geom;';
 }
 
@@ -2620,12 +2626,14 @@ function osmIngest(json, centerLat, centerLon) {
   osmNet.originLat = centerLat;
   osmNet.originLon = centerLon;
 
-  var roads = [], rails = [], railLines = [];
+  var roads = [], rails = [], railLines = [], waterEls = [];
 
   for (var i = 0; i < json.elements.length; i++) {
     var el = json.elements[i];
     if (el.type !== 'way' || !el.geometry || el.geometry.length < 2) continue;
     var tags = el.tags || {};
+    // coastline and water polygons feed the water layer, not the street graph
+    if (tags.natural || tags.waterway) { waterEls.push(el); continue; }
     var isRail = !!tags.railway;
     var target = isRail ? rails : roads;
 
@@ -2664,6 +2672,7 @@ function osmIngest(json, centerLat, centerLon) {
   osmNet.centerLat = centerLat;
   osmNet.centerLon = centerLon;
   osmNet.ready = roads.length > 0 || rails.length > 0;
+  if (window.NX && NX.water) NX.water.ingest(waterEls);
 }
 
 // Called from the sim loop; fires and forgets, never blocks a frame.
@@ -3279,6 +3288,7 @@ function chassisFor(vehId, spec) {
       ? new Cesium.Cartesian3(5.5, 9.5, 1.8)
       : new Cesium.Cartesian3(4.0, 6.5, 1.7);
   }
+  if (spec.water) return new Cesium.Cartesian3(0.95, 2.9, 0.6);
   return new Cesium.Cartesian3(1.9, 4.3, 0.65);
 }
 
@@ -3782,6 +3792,7 @@ function recoverVehicle() {
   simState.blocked = false;
   wallProbe.blocked = false;
   wallProbe.tick = -1;
+  if (window.NX) NX.fx.repair();
 
   if (kind === 'train') {
     if (snapToNearestSubwayTrack(4000)) showToast('Back on the rails');
@@ -4552,7 +4563,7 @@ function gameLoop(now) {
     var v = simState.spec;
 
     if (v.kind === 'train') stepTrain(input, dt);
-    else if (v.kind === 'drive') stepDrive(input, dt);
+    else if (v.kind === 'drive') (v.water ? NX.water.step(input, dt) : stepDrive(input, dt));
     else if (v.kind === 'foot') stepWalk(input, dt);
     else stepFlight(input, dt);
 
@@ -4565,6 +4576,7 @@ function gameLoop(now) {
     }
     updateAutoQuality(now);
 
+    NX.update(dt, now);
     updateSimRender();
     updateSpeedFeel();
     checkAdventure(dt);
@@ -4682,8 +4694,11 @@ function stepTrain(input, dt) {
    and refusing the second one pins the car in place forever. */
 var wallProbe = { blocked: false, tick: -1 };
 
-// Climb guard off: overpasses and elevated structures read as walls to it.
-var CLIMB_GUARD = false;
+// The climb guard only counts a rise as a wall where there is no street: a ramp,
+// an overpass or a bridge sits on a mapped road, so it is let through. Without
+// street data it cannot tell, so it does not stop anything.
+var CLIMB_GUARD = true;
+var CLIMB_ROAD_SLACK = 4;   // metres past a road's half width that still count as on the road
 
 function drivePathBlocked(state, dt) {
   if (!CLIMB_GUARD || !scene) return false;
@@ -4708,6 +4723,13 @@ function drivePathBlocked(state, dt) {
     ? Math.max(0.65, look * 0.9)
     : Math.max(1.5, look * 0.55);
   wallProbe.blocked = (h - state.ground) > limit;
+  if (wallProbe.blocked) {
+    if (!osmNet.ready) wallProbe.blocked = false;
+    else {
+      var rd = osmNearestRoad(Cesium.Math.toDegrees(aheadLat), Cesium.Math.toDegrees(aheadLon), 14);
+      if (rd && rd.dist <= rd.seg.meta.halfWidth + CLIMB_ROAD_SLACK) wallProbe.blocked = false;
+    }
+  }
   return wallProbe.blocked;
 }
 
@@ -4717,7 +4739,9 @@ function stepDrive(input, dt) {
   else if (input.throttle < 0) simState.speed += v.accel * 0.7 * input.throttle * dt;
   if (input.brake) simState.speed -= Math.sign(simState.speed) * v.brake * dt;
   simState.speed -= simState.speed * 0.22 * dt;
-  simState.speed = Math.max(-v.topSpeed * 0.4, Math.min(v.topSpeed, simState.speed));
+  // a damaged car loses top speed (ZAVOD: vehicledamage.js)
+  var topEff = v.topSpeed * (1 - 0.45 * (simState.damage || 0));
+  simState.speed = Math.max(-topEff * 0.4, Math.min(topEff, simState.speed));
   if (Math.abs(simState.speed) < 0.15 && !input.throttle) simState.speed = 0;
 
   var grip = Math.min(1, Math.abs(simState.speed) / 6);
@@ -4730,7 +4754,7 @@ function stepDrive(input, dt) {
   if (simState.blocked) {
     // Stop against the face instead of driving through it. Checked before the
     // move, so the car never ends up inside the geometry to begin with.
-    if (Math.abs(simState.speed) > 8) showToast('Blocked');
+    if (Math.abs(simState.speed) > 8) { showToast('Blocked'); NX.impact(simState.speed); }
     simState.speed *= -0.08;
   } else {
     var dDist = simState.speed * dt;
@@ -4742,7 +4766,9 @@ function stepDrive(input, dt) {
   sampleLiveGround(simState, dt);
   simState.height = simState.ground + v.ride;
   simState.roll += (-input.steer * grip * 0.18 - simState.roll) * 6 * dt;
-  simState.pitch += (0 - simState.pitch) * 5 * dt;
+  // the body dives under braking and squats under power (accelLong is smoothed in NX.fx)
+  var pitchWant = Math.max(-0.05, Math.min(0.05, -(simState.accelLong || 0) * 0.0016));
+  simState.pitch += (pitchWant - simState.pitch) * 5 * dt;
   updateTunnelVeil(1);
 }
 
@@ -5043,6 +5069,7 @@ function togglePause(force) {
   // The HUD plates otherwise ghost through the blurred scrim and read as a
   // render bug rather than a menu.
   document.body.classList.toggle('paused', isPaused);
+  if (window.NX) NX.pauseAudio(isPaused);
   if (!isPaused) { lastTime = performance.now(); return; }
 
   var kind = simState ? simState.spec.kind : 'drive';
@@ -5069,6 +5096,8 @@ function togglePause(force) {
             (simState && simState.spec.afterburner ? k('X', 'hold for afterburner') : '') +
             k('B', 'level off') + k('C', 'camera') + k('P', 'resume');
   }
+  guide += k('M', 'radio on / off') + k('N', 'next song') + k('H', 'horn') + k('Z', 'time of day') +
+           k('V', kind === 'fly' ? 'ring course' : (kind === 'drive' ? (simState.spec.water ? 'hoop course' : 'taxi fares') : 'start a game'));
   $('controlGuide').innerHTML = guide;
   var layers = [];
   if (sceneStatus.photoreal) layers.push('photorealistic 3D tiles');
@@ -5188,6 +5217,1395 @@ if (document.readyState === 'loading') {
   setupAuth();
   initMenu();
 }
+
+</script>
+<script id="atlas-next">
+/* ════════════════════════════════════════════════════════════
+   ATLAS NEXT — ideas ported from ZAVOD
+   Everything below hangs off one object, `NX`, and is called from three
+   places in the main script: NX.start() once the vehicle exists, NX.update()
+   every frame, and NX.impact() when the car hits something. Each subsystem
+   runs inside its own try/catch so a bug in one cannot take the frame down.
+   ════════════════════════════════════════════════════════════ */
+var NX = (function() {
+  var NXv = {};
+  var errCount = Object.create(null);
+  function guard(name, fn) {
+    try { fn(); } catch (e) {
+      errCount[name] = (errCount[name] || 0) + 1;
+      if (errCount[name] === 1 || errCount[name] % 300 === 0) console.warn('NX ' + name + ':', e);
+    }
+  }
+  function clamp(x, a, b) { return x < a ? a : (x > b ? b : x); }
+  function lsGet(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  NXv.clamp = clamp; NXv.guard = guard; NXv.lsGet = lsGet; NXv.lsSet = lsSet;
+
+  var lite = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0 && screen.width < 900);
+  NXv.lite = lite;
+  var subs = [];          // {name, start, update}
+  NXv.register = function(name, mod) { subs.push({ name: name, mod: mod }); };
+
+  /* ───────────── Audio engine (procedural, like zavod's src/audio) ───────────── */
+  var A = { ac: null, master: null, muted: lsGet('atlas_mute', '0') === '1', noise: null, eng: null, tyre: null, wind: null, water: null, bed: null, steps: 0, lastKind: '' };
+  NXv.audio = A;
+
+  function noiseBuffer(ac) {
+    var len = ac.sampleRate * 2, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    var seed = 1337;
+    for (var i = 0; i < len; i++) { seed = (seed * 16807) % 2147483647; d[i] = (seed / 1073741823.5) - 1; }
+    return buf;
+  }
+  function noiseSrc(ac) { var s = ac.createBufferSource(); s.buffer = A.noise; s.loop = true; return s; }
+
+  function ensureAudio() {
+    if (A.ac) { if (A.ac.state === 'suspended') A.ac.resume().catch(function() {}); return A.ac; }
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    var ac = A.ac = new AC();
+    A.noise = noiseBuffer(ac);
+    // master chain: gain -> soft limiter -> out (zavod's chain, trimmed)
+    var master = A.master = ac.createGain();
+    master.gain.value = A.muted ? 0 : 0.8;
+    var lim = ac.createDynamicsCompressor();
+    lim.threshold.value = -8; lim.knee.value = 6; lim.ratio.value = 12; lim.attack.value = 0.003; lim.release.value = 0.15;
+    master.connect(lim); lim.connect(ac.destination);
+
+    // engine: saw + square + sub through a lowpass, pitch and cutoff follow rpm
+    var eg = ac.createGain(); eg.gain.value = 0;
+    var ef = ac.createBiquadFilter(); ef.type = 'lowpass'; ef.frequency.value = 600; ef.Q.value = 2.5;
+    var o1 = ac.createOscillator(); o1.type = 'sawtooth';
+    var o2 = ac.createOscillator(); o2.type = 'square';
+    var o3 = ac.createOscillator(); o3.type = 'sine';
+    var g1 = ac.createGain(); g1.gain.value = 0.5;
+    var g2 = ac.createGain(); g2.gain.value = 0.22;
+    var g3 = ac.createGain(); g3.gain.value = 0.55;
+    o1.connect(g1); o2.connect(g2); o3.connect(g3);
+    g1.connect(ef); g2.connect(ef); g3.connect(ef);
+    ef.connect(eg); eg.connect(master);
+    o1.start(); o2.start(); o3.start();
+    A.eng = { gain: eg, filt: ef, o1: o1, o2: o2, o3: o3, gear: 0 };
+
+    // looped noise voices: tyre squeal, wind, water wash, jet / rotor roar
+    function noiseVoice(type, f, q) {
+      var s = noiseSrc(ac), flt = ac.createBiquadFilter(), g = ac.createGain();
+      flt.type = type; flt.frequency.value = f; flt.Q.value = q; g.gain.value = 0;
+      s.connect(flt); flt.connect(g); g.connect(master); s.start();
+      return { gain: g, filt: flt };
+    }
+    A.tyre = noiseVoice('bandpass', 2600, 6);
+    A.wind = noiseVoice('lowpass', 500, 0.7);
+    A.water = noiseVoice('bandpass', 700, 0.9);
+    A.roar = noiseVoice('lowpass', 900, 1.1);
+    A.bed = noiseVoice('lowpass', 380, 0.5);   // distant city / sea bed
+    // a single tone for turbine whine and train hum
+    var wo = ac.createOscillator(), wg = ac.createGain(); wo.type = 'sawtooth'; wg.gain.value = 0;
+    var wf = ac.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 900; wf.Q.value = 4;
+    wo.connect(wf); wf.connect(wg); wg.connect(master); wo.start();
+    A.whine = { osc: wo, gain: wg };
+    return ac;
+  }
+
+  // One-shot noise burst + low thump: crashes, footsteps, splashes
+  function burst(opts) {
+    var ac = A.ac; if (!ac || A.muted) return;
+    var t = ac.currentTime, s = noiseSrc(ac), f = ac.createBiquadFilter(), g = ac.createGain();
+    f.type = opts.type || 'lowpass'; f.frequency.value = opts.f || 800; f.Q.value = opts.q || 0.8;
+    var vol = opts.vol || 0.5, dur = opts.dur || 0.25;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    s.connect(f); f.connect(g); g.connect(A.master); s.start(t, Math.random() * 1.5); s.stop(t + dur + 0.05);
+    if (opts.thump) {
+      var o = ac.createOscillator(), og = ac.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(opts.thump, t); o.frequency.exponentialRampToValueAtTime(Math.max(28, opts.thump * 0.35), t + dur);
+      og.gain.setValueAtTime(vol * 0.9, t); og.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+      o.connect(og); og.connect(A.master); o.start(t); o.stop(t + dur + 0.05);
+    }
+  }
+  A.burst = burst;
+
+  NXv.horn = function() {
+    var ac = ensureAudio(); if (!ac || A.muted) return;
+    var t = ac.currentTime, g = ac.createGain();
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.22, t + 0.02); g.gain.setValueAtTime(0.22, t + 0.3); g.gain.linearRampToValueAtTime(0, t + 0.36);
+    g.connect(A.master);
+    [440, 554].forEach(function(fr) { var o = ac.createOscillator(); o.type = 'square'; o.frequency.value = fr; o.connect(g); o.start(t); o.stop(t + 0.4); });
+  };
+
+  NXv.impact = function(speed) {
+    var s = clamp(Math.abs(speed) / 30, 0.15, 1);
+    ensureAudio();
+    burst({ type: 'lowpass', f: 700 + s * 1600, vol: 0.35 + s * 0.5, dur: 0.18 + s * 0.35, thump: 90 });
+    burst({ type: 'highpass', f: 2400, vol: 0.12 + s * 0.2, dur: 0.12 });
+    NXv.onImpact && NXv.onImpact(speed);
+  };
+
+  // Gear model: speed bands per gear, rpm climbs inside each band
+  var GEARS = [0, 9, 17, 27, 40, 58, 90];
+  function engineRpm(speed, thr) {
+    var sp = Math.abs(speed), g = 1;
+    while (g < GEARS.length - 1 && sp > GEARS[g]) g++;
+    var lo = GEARS[g - 1], hi = GEARS[g];
+    var frac = clamp((sp - lo) / (hi - lo), 0, 1);
+    return { rpm: 900 + frac * 5200 * (0.55 + 0.45 * thr) + (g > 1 ? 800 : 0), gear: g };
+  }
+
+  A.update = function(dt, input) {
+    var ac = A.ac; if (!ac || !simState) return;
+    var t = ac.currentTime, spec = simState.spec, kind = spec.kind, sp = Math.abs(simState.speed);
+    var thr = input ? clamp(Math.max(input.throttle || 0, 0), 0, 1) : 0;
+    var vol = isPaused ? 0 : 1;
+    function set(p, v, tc) { p.setTargetAtTime(v, t, tc || 0.06); }
+
+    var boat = kind === 'drive' && !!spec.water, engOn = kind === 'drive';
+    if (engOn) {
+      var er = engineRpm(sp * (boat ? 0.55 : 1), thr);
+      var fire = er.rpm / 60 * (boat ? 1.0 : 2);   // 4-cyl: two firings per rev; a ski's twin is lazier
+      set(A.eng.o1.frequency, fire, 0.05); set(A.eng.o2.frequency, fire * 0.5, 0.05); set(A.eng.o3.frequency, fire * 0.5, 0.05);
+      set(A.eng.filt.frequency, 350 + er.rpm * 0.25 + thr * 700, 0.08);
+      set(A.eng.gain.gain, vol * (0.07 + thr * 0.10 + (er.rpm / 6900) * 0.06) * (simState.damage > 0.6 ? 1.25 : 1), 0.07);
+    } else set(A.eng.gain.gain, 0, 0.1);
+
+    // tyre squeal on a slide
+    var slip = (kind === 'drive') ? (simState.slip || 0) : 0;
+    set(A.tyre.gain.gain, vol * slip * 0.16, 0.05);
+    set(A.tyre.filt.frequency, 1900 + slip * 1400 + sp * 12, 0.08);
+
+    // wind scales with speed squared (more in the air)
+    var wmul = kind === 'fly' ? 1.4 : (kind === 'foot' ? 0.2 : 0.9);
+    set(A.wind.gain.gain, vol * clamp(Math.pow(sp / 70, 2) * 0.28 * wmul, 0, 0.35), 0.15);
+    set(A.wind.filt.frequency, 300 + sp * 9, 0.15);
+
+    // boat: water wash grows with speed
+    set(A.water.gain.gain, vol * (boat ? clamp(0.04 + sp / 40 * 0.22, 0, 0.3) : (simState.overWater ? 0.03 : 0)), 0.15);
+    set(A.water.filt.frequency, 500 + sp * 30, 0.15);
+
+    // aircraft and train
+    var fly = kind === 'fly', train = kind === 'train';
+    set(A.roar.gain.gain, vol * (fly ? 0.1 + clamp(sp / 380, 0, 1) * 0.22 + (simState.burnMix || 0) * 0.2 : (train ? clamp(sp / 60, 0, 1) * 0.22 : 0)), 0.12);
+    set(A.roar.filt.frequency, fly ? 500 + sp * 6 + (simState.burnMix || 0) * 900 : 220 + sp * 8, 0.12);
+    var heli = fly && spec.climb === 15;
+    set(A.whine.gain.gain, vol * (fly && !heli ? 0.012 + clamp(sp / 380, 0, 1) * 0.03 : (train ? clamp(sp / 60, 0, 1) * 0.02 : 0)), 0.12);
+    set(A.whine.osc.frequency, fly ? 700 + sp * 5 : 120 + sp * 6, 0.12);
+
+    // ambience bed: quieter on foot at night, louder near water
+    set(A.bed.gain.gain, vol * (0.035 + (simState.overWater ? 0.04 : 0)), 0.4);
+
+    // footsteps from the walk cycle
+    if (kind === 'foot' && sp > 0.4) {
+      A.steps += sp * dt;
+      var stride = sp > 3.2 ? 1.9 : 1.2;
+      if (A.steps > stride) { A.steps = 0; burst({ type: 'bandpass', f: 380 + Math.random() * 160, q: 1.4, vol: 0.05 + Math.min(0.1, sp * 0.015), dur: 0.09 }); }
+    }
+    A.lastKind = kind;
+  };
+
+  NXv.toggleMute = function() {
+    ensureAudio();
+    A.muted = !A.muted; lsSet('atlas_mute', A.muted ? '1' : '0');
+    if (A.master) A.master.gain.setTargetAtTime(A.muted ? 0 : 0.8, A.ac.currentTime, 0.05);
+    NXv.syncButtons();
+    showToast(A.muted ? 'Sound off' : 'Sound on');
+  };
+
+  /* ───────────── Luna Park Radio (zavod src/world/coney/radio.js) ─────────────
+     One station, a shuffled rotation on the wall clock: everyone hears the same
+     song at the same second. Plain <audio> elements, streamed from the ZAVOD
+     deployment, so nothing is decoded up front and nothing is stored here. */
+  var RADIO_HOST = 'https://zavod-chi.vercel.app/assets/audio/radio/';
+  var TRACKS = [
+    ['adidas-from-donbass', 'Adidas from Donbass'], ['gopnik-disneyland', 'Гопник-Диснейленд'],
+    ['burbon-bratva-gudzon', 'Бурбон, братва, Гудзон'], ['olya-angliyskaya', 'Оля английская'],
+    ['burbon-bratva-gudzon-2', 'Бурбон, братва, Гудзон (версия 2)'], ['trinidad-daddy-remastered', 'Trinidad Daddy (Remastered)'],
+    ['nutcracker-sandman-remastered', 'Nutcracker Sandman (Remastered)'], ['luna-park-kruzhis', 'Луна-парк, кружись'],
+    ['olya-angliyskaya-ruki-verh', 'Оля Английская (Ruki Verh)'], ['soccer-tavern', 'Soccer Tavern'],
+    ['chaika-mafia', 'ЧАЙКА MAFIA'], ['through-the-looking-glass-2', 'Through the Looking Glass 2']
+  ].map(function(t) { return { src: RADIO_HOST + t[0] + '.mp3', title: t[1] }; });
+  var R = { els: null, dur: [], cur: -1, skip: 0, on: false, failed: 0, lastTitle: '' };
+  NXv.radio = R;
+
+  function radioInit() {
+    if (R.els) return;
+    R.els = TRACKS.map(function(t, i) {
+      var a = new Audio(); a.preload = 'none'; a.src = t.src;
+      a.addEventListener('loadedmetadata', function() { R.dur[i] = a.duration || 0; });
+      a.addEventListener('error', function() { R.failed++; R.dur[i] = -1; });
+      return a;
+    });
+    R.dur = TRACKS.map(function() { return 0; });
+  }
+  function shuffleOrder(pass) {
+    var idx = TRACKS.map(function(_, k) { return k; });
+    var a = (pass * 2654435761) >>> 0 || 1;
+    function rnd() { a ^= a << 13; a >>>= 0; a ^= a >>> 17; a ^= a << 5; a >>>= 0; return a / 4294967296; }
+    for (var k = idx.length - 1; k > 0; k--) { var j = Math.floor(rnd() * (k + 1)); var tmp = idx[k]; idx[k] = idx[j]; idx[j] = tmp; }
+    return idx;
+  }
+  function passOrder(pass) {
+    var idx = shuffleOrder(pass), prev = shuffleOrder(pass - 1);
+    if (idx.length > 1 && idx[0] === prev[prev.length - 1]) { var t = idx[0]; idx[0] = idx[1]; idx[1] = t; }
+    return idx;
+  }
+  // where the station is now: [track, offset]. Tracks whose length is not known yet
+  // are loaded one at a time (metadata only) and count as zero until then.
+  function radioAt() {
+    var total = 0, i;
+    for (i = 0; i < R.dur.length; i++) { if (R.dur[i] === 0) return null; total += Math.max(0, R.dur[i]); }
+    if (!(total > 0)) return null;
+    var T = Date.now() / 1000 + R.skip, pass = Math.floor(T / total), t = T - pass * total;
+    var ord = passOrder(pass);
+    for (i = 0; i < ord.length; i++) { var d = Math.max(0, R.dur[ord[i]]); if (t < d) return [ord[i], t]; t -= d; }
+    return [0, 0];
+  }
+  NXv._radioAt = radioAt; NXv._radioPass = passOrder;
+  function radioUpdate() {
+    if (!R.on || !R.els) return;
+    if (R.failed >= TRACKS.length) { R.on = false; showToast('Radio unavailable offline'); NXv.syncButtons(); return; }
+    var at = radioAt(); if (!at) return;
+    var idx = at[0], off = at[1], a = R.els[idx];
+    if (R.cur !== idx) {
+      if (R.cur >= 0) R.els[R.cur].pause();
+      R.cur = idx; a.currentTime = off; a.play().catch(function() {});
+      if (R.lastTitle !== TRACKS[idx].title) { R.lastTitle = TRACKS[idx].title; showToast('♪ ' + TRACKS[idx].title); }
+      setMediaMeta(idx);
+    } else if (Math.abs(a.currentTime - off) > 1.5) a.currentTime = off;
+    if (a.paused && !a.ended) a.play().catch(function() {});
+    var onFootNow = simState && simState.spec.kind === 'foot';
+    a.volume = (A.muted || isPaused) ? 0 : (onFootNow ? 0.3 : 0.75);
+  }
+  function setMediaMeta(i) {
+    if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
+    try { navigator.mediaSession.metadata = new MediaMetadata({ title: TRACKS[i].title, artist: 'Arkady Sokolov', album: 'Luna Park Radio' }); } catch (e) {}
+  }
+  NXv.radioToggle = function() {
+    ensureAudio(); radioInit();
+    R.on = !R.on;
+    if (!R.on) { R.els.forEach(function(a) { if (!a.paused) a.pause(); }); R.cur = -1; showToast('Radio off'); }
+    else { R.failed = 0; showToast('Luna Park Radio…'); }
+    NXv.syncButtons();
+  };
+  NXv.radioNext = function() {
+    if (!R.on) return;
+    var at = radioAt(); if (!at) return;
+    R.skip += (R.dur[at[0]] || 0) - at[1] + 0.05; R.cur = -1;
+  };
+
+  // The frame loop returns early while paused, so silence is set here. Radio and
+  // engine come back on their own once frames resume.
+  NXv.pauseAudio = function(p) {
+    if (A.master) A.master.gain.setTargetAtTime((p || A.muted) ? 0 : 0.8, A.ac.currentTime, 0.04);
+    if (p && R.els) R.els.forEach(function(a) { if (!a.paused) a.pause(); });
+  };
+
+  NXv.syncButtons = function() {
+    var b = $('soundBtn'); if (b) b.textContent = 'Sound: ' + (A.muted ? 'Off' : 'On');
+    var r = $('radioBtn'); if (r) r.textContent = 'Radio: ' + (R.on ? 'On' : 'Off');
+  };
+
+  /* ───────────── lifecycle ───────────── */
+  var started = false;
+  NXv.start = function() {
+    if (!started) {
+      started = true;
+      var wake = function() { ensureAudio(); };
+      window.addEventListener('keydown', wake);
+      window.addEventListener('pointerdown', wake);
+      window.addEventListener('keydown', function(e) {
+        if (e.repeat) return;
+        if (e.code === 'KeyM') NXv.radioToggle();
+        else if (e.code === 'KeyN') NXv.radioNext();
+        else if (e.code === 'KeyH') NXv.horn();
+      });
+    }
+    NXv.syncButtons();
+    if (lsGet('atlas_nx_hint', '0') !== '1') { lsSet('atlas_nx_hint', '1'); setTimeout(function() { showToast('M radio \u00b7 V game \u00b7 Z time of day \u00b7 H horn'); }, 5000); }
+    subs.forEach(function(s) { if (s.mod.start) guard(s.name + '.start', s.mod.start); });
+  };
+
+  document.addEventListener('visibilitychange', function() { NXv.pauseAudio(document.hidden || (typeof isPaused !== 'undefined' && isPaused)); });
+  var lastIn = null;
+  NXv.update = function(dt, now) {
+    if (!simState) return;
+    var input = readInput();
+    lastIn = input;
+    guard('audio', function() { A.update(dt, input); });
+    guard('radio', radioUpdate);
+    subs.forEach(function(s) { if (s.mod.update) guard(s.name, function() { s.mod.update(dt, now, input); }); });
+  };
+  NXv.input = function() { return lastIn; };
+
+  return NXv;
+})();
+
+/* ════════════════════════════════════════════════════════════
+   WATER — after ZAVOD's src/world/tilewater.js
+   ZAVOD teaches the Map Lab tiles' own water triangles to shade themselves
+   (shore foam, depth tint, fresnel sheen, sun glint on a scrolling ripple)
+   with no extra mesh or draw call. Atlas does the same to Google's tileset
+   with a CustomShader: the photoreal water is just a flat textured mesh, so
+   a fragment counts as water when it is both flat (face normal ≈ ellipsoid
+   up) and blue/teal and not bright. Shallow water reads as lighter in the
+   photography, so lightness stands in for ZAVOD's shore-distance depth proxy
+   and drives the tint and the foam band. No water map to rasterise; the cost
+   is one extra branch on non-water fragments.
+
+   Where the water is for the CPU (jet ski, spray, ambience) comes from
+   OpenStreetMap: coastline ways (land is on their left) and water polygons,
+   fetched in the same Overpass round trip as the roads.
+   ════════════════════════════════════════════════════════════ */
+(function() {
+  var W = {};
+  NX.water = W;
+  var clamp = NX.clamp;
+
+  var SHADER = [
+    'float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }',
+    'float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);',
+    '  return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y); }',
+    'float ripple(vec2 p, float t){',
+    '  float h = vnoise(p * 0.9 + vec2(t * 0.35, t * 0.2)) * 0.6 + vnoise(p * 2.3 - vec2(t * 0.5, -t * 0.3)) * 0.3;',
+    '  #ifdef NX_WATER_FULL',
+    '  h += vnoise(p * 5.1 + vec2(t * 0.7, -t * 0.4)) * 0.15;',
+    '  #endif',
+    '  return h; }',
+    'void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {',
+    '  vec3 c = material.diffuse;',
+    '  float lum = dot(c, vec3(0.299, 0.587, 0.114));',
+    '  float blueish = c.b - max(c.r, c.g * 0.85);',
+    '  float teal = min(c.g, c.b) - c.r;',
+    '  float w = max(smoothstep(0.02, 0.07, blueish), smoothstep(0.03, 0.08, teal)) * (1.0 - smoothstep(0.58, 0.78, lum));',
+    '  if (w < 0.01) return;',
+    '  vec3 pEC = fsInput.attributes.positionEC;',
+    '  vec3 fn = normalize(cross(dFdx(pEC), dFdy(pEC)));',
+    '  vec3 up = normalize(czm_viewRotation * normalize(fsInput.attributes.positionWC));',
+    '  w *= smoothstep(0.955, 0.99, abs(dot(fn, up)));',
+    '  if (w < 0.01) return;',
+    '  float t = u_time;',
+    '  vec2 rp = fsInput.attributes.positionMC.xy;',
+    '  float e = 0.35;',
+    '  float h0 = ripple(rp, t);',
+    '  vec2 g = vec2(ripple(rp + vec2(e, 0.0), t) - h0, ripple(rp + vec2(0.0, e), t) - h0) / e;',
+    '  vec3 ax = abs(up.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);',
+    '  vec3 t1 = normalize(cross(up, ax)); vec3 t2 = cross(up, t1);',
+    '  vec3 n = normalize(up - (t1 * g.x + t2 * g.y) * 0.35);',
+    '  vec3 v = normalize(-pEC);',
+    '  float sunUp = dot(czm_sunDirectionEC, up);',
+    '  float lit = clamp(sunUp * 0.5 + 0.55, 0.18, 1.0);',
+    '  float shallow = smoothstep(0.12, 0.5, lum);',
+    '  vec3 tint = mix(vec3(0.015, 0.085, 0.16), vec3(0.12, 0.36, 0.38), shallow) * (0.55 + 0.75 * lit);',
+    '  vec3 col = mix(c, tint, 0.55 * u_strength);',
+    '  float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 4.0);',
+    '  col += u_sky * fres * 0.5;',
+    '  vec3 r = reflect(-czm_sunDirectionEC, n);',
+    '  float glint = pow(max(dot(r, v), 0.0), 180.0) * step(0.0, sunUp);',
+    '  col += vec3(1.0, 0.95, 0.82) * glint * 1.4;',
+    '  float lace = vnoise(rp * 0.5 + vec2(t * 0.15, t * 0.1)) * 0.65 + vnoise(rp * 1.6 - vec2(t * 0.25)) * 0.35;',
+    '  float pulse = 0.5 + 0.5 * sin(t * 1.3 + lum * 14.0);',
+    '  float foam = smoothstep(0.55, 0.85, shallow) * smoothstep(0.52, 0.78, lace + 0.12 * pulse) * smoothstep(900.0, 250.0, -pEC.z);',
+    '  col = mix(col, vec3(0.92, 0.96, 0.98) * (0.6 + 0.4 * lit), foam * 0.85 * u_strength);',
+    '  material.diffuse = mix(c, col, w);',
+    '}'
+  ].join('\n');
+
+  var customShader = null, shaderTilesets = [];
+  W.shaderText = function() { return SHADER; };
+  W.makeShader = function(lite) {
+    var defines = lite ? [] : ['NX_WATER_FULL'];
+    return new Cesium.CustomShader({
+      uniforms: {
+        u_time: { type: Cesium.UniformType.FLOAT, value: 0 },
+        u_strength: { type: Cesium.UniformType.FLOAT, value: 1 },
+        u_sky: { type: Cesium.UniformType.VEC3, value: new Cesium.Cartesian3(0.55, 0.72, 0.86) }
+      },
+      fragmentShaderText: (lite ? '' : '#define NX_WATER_FULL\n') + SHADER
+    });
+  };
+  W.attach = function(tileset) {
+    if (!tileset || tileset.__nxWater) return;
+    tileset.__nxWater = true;
+    customShader = customShader || W.makeShader(NX.lite);
+    tileset.customShader = customShader;
+    shaderTilesets.push(tileset);
+  };
+  W.setSky = function(r, g, b) { if (customShader) customShader.setUniform('u_sky', new Cesium.Cartesian3(r, g, b)); };
+  W.shader = function() { return customShader; };
+
+  /* ───────────── where is the water? (OSM coastline + water polygons) ───────────── */
+  W.net = { coast: [], coastGrid: null, polys: [], ready: false };
+  W.ingest = function(elements) {
+    var coast = [], polys = [];
+    for (var i = 0; i < elements.length; i++) {
+      var el = elements[i], tags = el.tags || {};
+      if (el.type !== 'way' || !el.geometry || el.geometry.length < 3 && tags.natural !== 'coastline') continue;
+      var isCoast = tags.natural === 'coastline';
+      var isWaterPoly = tags.natural === 'water' || tags.waterway === 'riverbank';
+      if (!isCoast && !isWaterPoly) continue;
+      var pts = [];
+      for (var g = 0; g < el.geometry.length; g++) pts.push(osmProject(el.geometry[g].lat, el.geometry[g].lon));
+      if (isCoast) {
+        for (var s = 0; s < pts.length - 1; s++) coast.push({ ax: pts[s].x, ay: pts[s].y, bx: pts[s + 1].x, by: pts[s + 1].y });
+      } else {
+        var f = pts[0], l = pts[pts.length - 1];
+        if (Math.hypot(f.x - l.x, f.y - l.y) > 1) continue;   // only closed rings are areas
+        var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+        for (var k = 0; k < pts.length; k++) { x0 = Math.min(x0, pts[k].x); x1 = Math.max(x1, pts[k].x); y0 = Math.min(y0, pts[k].y); y1 = Math.max(y1, pts[k].y); }
+        polys.push({ pts: pts, x0: x0, y0: y0, x1: x1, y1: y1 });
+      }
+    }
+    W.net.coast = coast; W.net.polys = polys;
+    W.net.coastGrid = coast.length ? osmBuildGrid(coast) : null;
+    W.net.ready = coast.length > 0 || polys.length > 0;
+  };
+  function inRing(pts, x, y) {
+    var inside = false;
+    for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      var xi = pts[i].x, yi = pts[i].y, xj = pts[j].x, yj = pts[j].y;
+      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+  /** true / false, or null when no water data covers here */
+  W.isWaterXY = function(x, y) {
+    var net = W.net;
+    if (!net.ready) return null;
+    for (var i = 0; i < net.polys.length; i++) {
+      var p = net.polys[i];
+      if (x < p.x0 || x > p.x1 || y < p.y0 || y > p.y1) continue;
+      if (inRing(p.pts, x, y)) return true;
+    }
+    if (net.coastGrid) {
+      var hit = osmNearest(net.coast, net.coastGrid, x, y, 1500);
+      if (hit) {
+        var s = hit.seg, dx = s.bx - s.ax, dy = s.by - s.ay;
+        // OSM: land lies on the left of a coastline way, water on the right
+        return (dx * (y - s.ay) - dy * (x - s.ax)) < 0;
+      }
+    }
+    return false;
+  };
+  W.isWater = function(latDeg, lonDeg) {
+    if (!osmNet.ready) return null;
+    var p = osmProject(latDeg, lonDeg);
+    return W.isWaterXY(p.x, p.y);
+  };
+  /** nearest open water to a point, searching outward in rings; null when unknown or none within maxR */
+  W.nearestWater = function(latDeg, lonDeg, maxR) {
+    if (W.isWater(latDeg, lonDeg) === true) return { lat: latDeg, lon: lonDeg };
+    if (!W.net.ready) return null;
+    var p = osmProject(latDeg, lonDeg);
+    for (var r = 15; r <= maxR; r += 15) {
+      for (var a = 0; a < 24; a++) {
+        var ang = a / 24 * Math.PI * 2, x = p.x + Math.sin(ang) * r, y = p.y + Math.cos(ang) * r;
+        if (W.isWaterXY(x, y) === true && W.isWaterXY(p.x + Math.sin(ang) * (r + 20), p.y + Math.cos(ang) * (r + 20)) === true) {
+          var ll = osmUnproject(x, y); return { lat: ll.lat, lon: ll.lon };
+        }
+      }
+    }
+    return null;
+  };
+
+  /* ───────────── jet ski ─────────────
+     Not a rail: it has a velocity vector separate from its heading, so it
+     slides out of a turn the way a ski does, and it is stopped by the shore
+     (OSM water test, one lookahead) the way the climb guard stops a car at a
+     wall. With no water data it rides free over whatever surface it samples. */
+  var bobT = 0;
+  W.step = function(input, dt) {
+    var s = simState, v = s.spec;
+    if (!s.vel) s.vel = { e: 0, n: 0 };
+    if (input.throttle > 0) s.speed += v.accel * input.throttle * dt;
+    else if (input.throttle < 0) s.speed += v.accel * 0.6 * input.throttle * dt;
+    if (input.brake) s.speed -= Math.sign(s.speed) * v.brake * dt;
+    s.speed -= s.speed * 0.16 * dt;
+    s.speed = clamp(s.speed, -v.topSpeed * 0.3, v.topSpeed);
+    if (Math.abs(s.speed) < 0.1 && !input.throttle) s.speed = 0;
+
+    // heading: a ski only turns with way on, and turns harder when you lean in (shift)
+    var grip = clamp(Math.abs(s.speed) / 5, 0, 1);
+    var dir = s.speed < 0 ? -1 : 1;
+    s.heading += input.steer * v.steer * grip * dir * (input.drift ? 1.5 : 1) * dt;
+    s.heading = ((s.heading % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+    // thrust vector along heading; the velocity relaxes toward it, so a sharp turn skids
+    var fe = Math.sin(s.heading) * s.speed, fn = Math.cos(s.heading) * s.speed;
+    var k = 1 - Math.exp(-(input.drift ? 1.4 : 2.6) * dt);
+    s.vel.e += (fe - s.vel.e) * k; s.vel.n += (fn - s.vel.n) * k;
+    var slipV = Math.hypot(s.vel.e - fe, s.vel.n - fn);
+    s.slip = clamp(slipV / 7, 0, 1);
+
+    var dE = s.vel.e * dt, dN = s.vel.n * dt;
+    var nLat = s.lat + dN / EARTH_R, nLon = s.lon + dE / (EARTH_R * Math.max(0.05, Math.cos(s.lat)));
+    var ahead = 6 + Math.hypot(s.vel.e, s.vel.n) * dt * 2;
+    var mag = Math.hypot(dE, dN) || 1;
+    var aLat = s.lat + (dN / mag * ahead) / EARTH_R, aLon = s.lon + (dE / mag * ahead) / (EARTH_R * Math.max(0.05, Math.cos(s.lat)));
+    var wet = W.isWater(Cesium.Math.toDegrees(aLat), Cesium.Math.toDegrees(aLon));
+    if (wet === false && Math.hypot(s.vel.e, s.vel.n) > 0.5) {
+      // beached: lose the way, bounce back a little
+      if (Math.abs(s.speed) > 6) { showToast('Shore'); NX.impact(s.speed * 0.5); }
+      s.speed *= -0.15; s.vel.e *= -0.2; s.vel.n *= -0.2;
+    } else {
+      s.lat = nLat; s.lon = nLon;
+    }
+    s.overWater = wet !== false;
+
+    sampleLiveGround(s, dt);
+    bobT += dt;
+    var chop = Math.sin(bobT * 2.3) * 0.05 + Math.sin(bobT * 3.7 + 1.1) * 0.03;
+    s.height = s.ground + v.ride + chop * (0.4 + clamp(Math.abs(s.speed) / 20, 0, 1));
+    // lean into the turn, bow up on the throttle, squat at speed
+    s.roll += (-input.steer * grip * 0.30 - s.roll) * 5 * dt;
+    s.pitch += ((clamp(s.speed / v.topSpeed, 0, 1) * 0.10 + Math.sin(bobT * 2.9) * 0.012) - s.pitch) * 4 * dt;
+    updateTunnelVeil(1);
+  };
+
+  W.start = function() {
+    if (simState && simState.spec.water) {
+      // put the ski on open water if the spawn was on land
+      var near = W.nearestWater(Cesium.Math.toDegrees(simState.lat), Cesium.Math.toDegrees(simState.lon), 600);
+      if (near) { simState.lat = Cesium.Math.toRadians(near.lat); simState.lon = Cesium.Math.toRadians(near.lon); }
+    }
+  };
+  var lastOsmCenter = null, snapped = false, lastWaterVeh = false;
+  W.update = function(dt, now) {
+    var cs = customShader;
+    if (cs) { cs.setUniform('u_time', (now / 1000) % 3600); }
+    if (!simState) return;
+    // water shapes arrive with each OSM fetch (osmIngest calls W.ingest); the jet ski snaps to water once
+    var wv = !!simState.spec.water;
+    if (wv !== lastWaterVeh) { lastWaterVeh = wv; snapped = false; lastOsmCenter = null; }   // changed into / out of the ski
+    if (osmNet.ready && osmNet.centerLat !== lastOsmCenter) {
+      lastOsmCenter = osmNet.centerLat;
+      if (simState.spec.water && !snapped && W.net.ready) {
+        snapped = true;
+        if (W.isWater(Cesium.Math.toDegrees(simState.lat), Cesium.Math.toDegrees(simState.lon)) === false) {
+          var near = W.nearestWater(Cesium.Math.toDegrees(simState.lat), Cesium.Math.toDegrees(simState.lon), 600);
+          if (near) { simState.lat = Cesium.Math.toRadians(near.lat); simState.lon = Cesium.Math.toRadians(near.lon); showToast('Launched from the nearest water'); }
+          else showToast('No water within 600 m');
+        }
+      }
+    }
+    if (!simState.spec.water && frameTick % 20 === 0) {
+      var wet = W.isWater(Cesium.Math.toDegrees(simState.lat), Cesium.Math.toDegrees(simState.lon));
+      simState.overWater = wet === true && (simState.height - simState.ground) < 400;
+    }
+  };
+  NX.register('water', W);
+})();
+
+/* ════════════════════════════════════════════════════════════
+   VEHICLE FX, DAMAGE AND SUSPENSION — after ZAVOD's skidmarks.js,
+   waterfx.js and vehicledamage.js
+   · skid marks: a ring buffer of polyline strips from each rear tyre, so a map
+     nobody drifts on pays nothing (ZAVOD: one InstancedMesh, ring of 320)
+   · particle systems: tyre smoke, jet-ski spray, damage smoke
+   · damage: impacts above 6 m/s cost health; a hurt car loses top speed, smokes
+     and sounds rough. Recover (B) repairs.
+   · suspension: the body dives under braking and squats under power
+   ════════════════════════════════════════════════════════════ */
+(function() {
+  var F = {};
+  NX.fx = F;
+  var clamp = NX.clamp, lite = NX.lite;
+
+  /* ---------- particle sprite ---------- */
+  var sprite = null;
+  function puffImage() {
+    if (sprite) return sprite;
+    var c = document.createElement('canvas'); c.width = c.height = 64;
+    var g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    sprite = c; return c;
+  }
+  var systems = {};
+  function makeSystem(name, o) {
+    var sys = new Cesium.ParticleSystem({
+      image: puffImage(),
+      startColor: o.c0, endColor: o.c1,
+      startScale: o.s0, endScale: o.s1,
+      minimumParticleLife: o.life[0], maximumParticleLife: o.life[1],
+      minimumSpeed: o.speed[0], maximumSpeed: o.speed[1],
+      imageSize: new Cesium.Cartesian2(1, 1),
+      emissionRate: 0,
+      lifetime: 16.0, loop: true,
+      emitter: new Cesium.ConeEmitter(Cesium.Math.toRadians(o.cone)),
+      sizeInMeters: true,
+      modelMatrix: Cesium.Matrix4.IDENTITY,
+      emitterModelMatrix: Cesium.Matrix4.IDENTITY,
+      updateCallback: o.gravity ? function(p, dt) {
+        var up = Cesium.Cartesian3.normalize(p.position, new Cesium.Cartesian3());
+        Cesium.Cartesian3.multiplyByScalar(up, -o.gravity * dt, up);
+        Cesium.Cartesian3.add(p.velocity, up, p.velocity);
+      } : undefined
+    });
+    scene.primitives.add(sys);
+    systems[name] = sys;
+    return sys;
+  }
+  var tmpM = new Cesium.Matrix4(), tmpV = new Cesium.Cartesian3();
+  /** put a system at the car, offset (east, north, up) metres from it */
+  function aim(sys, e, n, u, rate) {
+    var pos = Cesium.Cartesian3.fromRadians(simState.lon, simState.lat, simState.height);
+    sys.modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(pos, undefined, tmpM);
+    sys.emitterModelMatrix = Cesium.Matrix4.fromTranslation(Cesium.Cartesian3.fromElements(e, n, u, tmpV), sys.emitterModelMatrix);
+    sys.emissionRate = rate;
+  }
+  F.systems = systems;
+
+  /* ---------- skid marks ---------- */
+  var SKID_N = lite ? 90 : 220, SKID_LIFT = 0.12;
+  var skidColl = null, skidNext = 0, skidLast = [null, null];
+  function buildSkids() {
+    skidColl = new Cesium.PolylineCollection();
+    var a = new Cesium.Cartesian3(1, 0, 0), b = new Cesium.Cartesian3(2, 0, 0);
+    var mat = Cesium.Material.fromType('Color', { color: new Cesium.Color(0.03, 0.03, 0.03, 0.55) });
+    for (var i = 0; i < SKID_N; i++) skidColl.add({ positions: [a, b], width: 3, material: mat, show: false });
+    scene.primitives.add(skidColl);
+  }
+  F.skidCount = function() { var n = 0; if (skidColl) for (var i = 0; i < skidColl.length; i++) if (skidColl.get(i).show) n++; return n; };
+  function wheelPoint(side, back) {
+    var s = simState, h = s.heading;
+    var e = Math.sin(h) * (-back) + Math.cos(h) * side, n = Math.cos(h) * (-back) - Math.sin(h) * side;
+    var lat = s.lat + n / EARTH_R, lon = s.lon + e / (EARTH_R * Math.max(0.05, Math.cos(s.lat)));
+    return Cesium.Cartesian3.fromRadians(lon, lat, s.ground + SKID_LIFT);
+  }
+  function skidStep(sliding) {
+    if (!sliding) { skidLast[0] = skidLast[1] = null; return; }
+    if (!skidColl) buildSkids();
+    for (var w = 0; w < 2; w++) {
+      var pt = wheelPoint(w === 0 ? -0.85 : 0.85, 1.25);
+      var prev = skidLast[w];
+      if (prev && Cesium.Cartesian3.distance(prev, pt) > 0.7) {
+        var pl = skidColl.get(skidNext); skidNext = (skidNext + 1) % SKID_N;
+        pl.positions = [prev, pt]; pl.show = true;
+        skidLast[w] = pt;
+      } else if (!prev) skidLast[w] = pt;
+    }
+  }
+
+  /* ---------- per-frame ---------- */
+  var prevSpeed = 0, shake = 0, built = false, hurtSaid = 0;
+  F.damage = function() { return simState ? (simState.damage || 0) : 0; };
+  NX.onImpact = function(speed) {
+    if (!simState) return;
+    var sp = Math.abs(speed);
+    shake = clamp(sp / 30, 0.2, 1);
+    if (simState.spec.kind !== 'drive' || sp < 6) return;
+    var before = simState.damage || 0;
+    simState.damage = clamp(before + clamp((sp - 6) / 55, 0.02, 0.33), 0, 1);
+    if (before < 0.35 && simState.damage >= 0.35) showToast('Engine smoking');
+    if (before < 0.8 && simState.damage >= 0.8) showToast('Barely running');
+  };
+  F.repair = function() { if (simState) simState.damage = 0; };
+
+  F.start = function() {
+    if (built) return;
+    built = true;
+    makeSystem('tyre', { c0: new Cesium.Color(0.82, 0.82, 0.82, 0.55), c1: new Cesium.Color(0.7, 0.7, 0.7, 0.0), s0: 1.0, s1: 4.2, life: [0.8, 1.6], speed: [0.6, 1.6], cone: 28 });
+    makeSystem('spray', { c0: new Cesium.Color(0.95, 0.98, 1.0, 0.7), c1: new Cesium.Color(0.85, 0.93, 1.0, 0.0), s0: 0.7, s1: 3.4, life: [0.7, 1.3], speed: [2.5, 6], cone: 38, gravity: 3 });
+    makeSystem('smoke', { c0: new Cesium.Color(0.08, 0.08, 0.08, 0.75), c1: new Cesium.Color(0.25, 0.25, 0.25, 0.0), s0: 0.6, s1: 3.0, life: [1.2, 2.4], speed: [1.0, 2.6], cone: 18 });
+  };
+
+  F.update = function(dt, now, input) {
+    var s = simState; if (!s) return;
+    var kind = s.spec.kind, sp = Math.abs(s.speed), drive = kind === 'drive', water = !!s.spec.water;
+    if (!systems.tyre) return;
+
+    // longitudinal acceleration (smoothed) drives dive and squat in stepDrive
+    var acc = dt > 0 ? (s.speed - prevSpeed) / dt : 0;
+    prevSpeed = s.speed;
+    s.accelLong = (s.accelLong || 0) * 0.85 + clamp(acc, -40, 40) * 0.15;
+
+    // slip for road cars: hard braking, a drift, or a hard corner at speed
+    if (drive && !water) {
+      var cornering = Math.abs(input.steer) * sp / s.spec.topSpeed;
+      var want = 0;
+      if (input.brake && sp > 12) want = Math.max(want, clamp(sp / 40, 0.5, 1));
+      if (input.drift && Math.abs(input.steer) > 0.15 && sp > 7) want = Math.max(want, 0.9);
+      if (cornering > 0.45 && sp > 14) want = Math.max(want, clamp((cornering - 0.35) * 1.8, 0, 0.8));
+      if (input.throttle > 0.9 && sp < 7 && s.spec.accel > 30) want = Math.max(want, 0.5);   // launch wheelspin in a hot car
+      s.slip = (s.slip || 0) + (want - (s.slip || 0)) * clamp(10 * dt, 0, 1);
+      if (s.height - s.ground > 3) s.slip = 0;
+    } else if (!water) s.slip = 0;
+
+    var sliding = drive && !water && s.slip > 0.35;
+    skidStep(sliding);
+    var back = -2.0;
+    var fE = Math.sin(s.heading), fN = Math.cos(s.heading);
+    aim(systems.tyre, fE * back, fN * back, 0.2, sliding ? (lite ? 14 : 30) * s.slip : 0);
+    // jet ski: spray off the stern grows with speed, and with a skid
+    if (water) aim(systems.spray, fE * -1.4, fN * -1.4, 0.3, clamp(sp / 28, 0, 1) * (lite ? 22 : 48) + s.slip * 20);
+    else systems.spray.emissionRate = 0;
+    // smoking engine
+    var dmg = s.damage || 0;
+    aim(systems.smoke, fE * 1.5, fN * 1.5, 0.9, dmg > 0.34 ? (dmg - 0.3) * (lite ? 24 : 55) : 0);
+
+    // an impact shakes the body for a moment
+    if (shake > 0.01) { s.roll += (Math.random() - 0.5) * shake * 0.05; s.pitch += (Math.random() - 0.5) * shake * 0.03; shake *= Math.exp(-5 * dt); }
+  };
+  NX.register('fx', F);
+})();
+
+/* ════════════════════════════════════════════════════════════
+   PEOPLE AND TRAFFIC — after ZAVOD's people.js, crowd.js and npcwalk.js
+   ZAVOD authors its crowds per map. Atlas has no authored maps, so the same
+   idea runs off OpenStreetMap anywhere on Earth: pedestrians walk the
+   pavement beside the nearest street, cars drive its lanes, both follow the
+   street graph and turn at junctions. They live in a ring around the player
+   (spawned out of sight, recycled behind), so the cost is a fixed pool of
+   models, not a function of the city.
+   Models: Cesium Man (Khronos glTF Sample Assets, CC-BY 4.0) for people and
+   the existing Car Concept for traffic. If the person model cannot load, people
+   fall back to coloured capsules. Models are pooled up front, never created in
+   the frame loop.
+   ════════════════════════════════════════════════════════════ */
+(function() {
+  var N = {};
+  NX.npc = N;
+  var clamp = NX.clamp, lite = NX.lite;
+  var PED_URL = 'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/CesiumMan/glTF-Binary/CesiumMan.glb';
+  var N_PED = lite ? 10 : 20, N_CAR = lite ? 4 : 8;
+  var RING_MIN = 35, RING_MAX = 240, DESPAWN = 300;
+  var CAR_SINK = 0.16 * (chassisFor('sedan', VEHICLES.sedan).y / VEHICLE_MODELS.sedan.length);   // same ground drop as the player's car
+  var CLOTHES = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#f39c12', '#16a085', '#7f8c8d', '#d35400', '#2c3e50', '#e84393'];
+  var CAR_TINTS = ['#20486b', '#7a1f1f', '#d8d8d8', '#1d1d1d', '#355e3b', '#b9b9a8', '#4a3c6e', '#a8742a'];
+  var SPEED_LIMIT = { motorway: 26, trunk: 20, primary: 15, secondary: 13, tertiary: 11, unclassified: 9, residential: 8, living_street: 4, service: 4, pedestrian: 0 };
+
+  N.peds = []; N.cars = [];
+  var pool = { ped: [], car: [] };
+  var building = false, pedModelFailed = false, spawnClock = 0, lastRoads = null, adj = null;
+  var hit = { ped: 0, car: 0 };
+  // scene.sampleHeight is a ray cast against the tile meshes: the costly call. NPCs share a per-frame
+  // millisecond budget; each sample's real cost is measured, so a slow machine simply refreshes them less often.
+  var GROUND_CREDIT_MS = 1.5, GROUND_CREDIT_CAP = 6, groundCredit = 0, groundRR = 0;
+  N.stats = function() {
+    function live(a) { return a.filter(function(n) { return n.alive; }).length; }
+    return { peds: live(N.peds), cars: live(N.cars), pooled: N.peds.length + N.cars.length, pedModel: !pedModelFailed, hit: hit };
+  };
+
+  /* ---------- street graph ---------- */
+  function key(x, y) { return Math.round(x * 2) + ',' + Math.round(y * 2); }
+  function buildAdj() {
+    adj = { map: Object.create(null), roads: osmNet.roads };
+    var segs = osmNet.roads;
+    for (var i = 0; i < segs.length; i++) {
+      var s = segs[i], ka = key(s.ax, s.ay), kb = key(s.bx, s.by);
+      (adj.map[ka] = adj.map[ka] || []).push({ s: s, atA: true });
+      (adj.map[kb] = adj.map[kb] || []).push({ s: s, atA: false });
+    }
+  }
+  function roadClass(s) { var h = s.meta.tags && s.meta.tags.highway || ''; return h.replace('_link', ''); }
+  function okForPed(s) {
+    var hw = s.meta.tags && s.meta.tags.highway || '';
+    return !s.meta.tunnel && !/^(motorway|trunk)/.test(hw);   // no pavement on a motorway
+  }
+  function okForCar(s) { return !s.meta.tunnel && roadClass(s) !== 'pedestrian' && s.meta.tags && s.meta.tags.access !== 'private'; }
+  function segLen(s) { return Math.hypot(s.bx - s.ax, s.by - s.ay); }
+
+  /** pick the segment to continue onto after leaving endpoint (ex,ey) of `from`; dirX/dirY = travel direction */
+  function nextSeg(from, ex, ey, dx, dy, forCar) {
+    if (!adj || adj.roads !== osmNet.roads) buildAdj();
+    var list = adj.map[key(ex, ey)] || [], cands = [];
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i]; if (c.s === from) continue;
+      if (forCar ? !okForCar(c.s) : !okForPed(c.s)) continue;
+      if (forCar && c.s.meta.oneway && !c.atA) continue;       // a one-way is only entered at its start
+      var sdx = c.atA ? c.s.bx - c.s.ax : c.s.ax - c.s.bx, sdy = c.atA ? c.s.by - c.s.ay : c.s.ay - c.s.by, L = Math.hypot(sdx, sdy) || 1;
+      var turn = Math.acos(clamp((sdx * dx + sdy * dy) / L, -1, 1));
+      cands.push({ s: c.s, atA: c.atA, turn: turn });
+    }
+    if (!cands.length) return null;
+    cands.sort(function(a, b) { return a.turn - b.turn; });
+    // mostly straight on, sometimes the turn
+    return (cands.length > 1 && Math.random() < 0.35) ? cands[1 + Math.floor(Math.random() * (cands.length - 1))] : cands[0];
+  }
+
+  /* ---------- models ---------- */
+  function tintModel(m, css, blend) {
+    m.color = Cesium.Color.fromCssColorString(css); m.colorBlendMode = Cesium.ColorBlendMode.MIX; m.colorBlendAmount = blend;
+  }
+  async function loadModel(url, scale) {
+    var m = await Cesium.Model.fromGltfAsync({ url: url, scale: scale, modelMatrix: Cesium.Matrix4.IDENTITY.clone(), allowPicking: false, incrementallyLoadTextures: true });
+    m.show = false;
+    scene.primitives.add(m);
+    await new Promise(function(res, rej) {
+      m.readyEvent.addEventListener(function() { res(); });
+      m.errorEvent.addEventListener(function(e) { rej(e); });
+      setTimeout(function() { rej(new Error('model load timed out')); }, 45000);
+    });
+    return m;
+  }
+  function makeBean(i) {
+    // fallback person: a capsule-ish ellipsoid, one entity
+    var e = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(0, 0, 0),
+      ellipsoid: { radii: new Cesium.Cartesian3(0.26, 0.26, 0.88), material: Cesium.Color.fromCssColorString(CLOTHES[i % CLOTHES.length]) },
+      show: false
+    });
+    return { bean: e };
+  }
+  async function buildPool() {
+    if (building) return; building = true;
+    var carCfg = VEHICLE_MODELS.sedan, i;
+    // people first (cheap), then cars
+    for (i = 0; i < N_PED; i++) {
+      var p = { kind: 'ped', alive: false, i: i, color: CLOTHES[i % CLOTHES.length] };
+      if (!pedModelFailed) {
+        try {
+          p.model = await loadModel(PED_URL, 1.0);
+          tintModel(p.model, p.color, 0.45);
+          p.model.activeAnimations.addAll({ loop: Cesium.ModelAnimationLoop.REPEAT, multiplier: 1.0 });
+        } catch (e) { pedModelFailed = true; console.warn('Person model unavailable, using capsules:', e && e.message || e); }
+      }
+      if (pedModelFailed) p.bean = makeBean(i).bean;
+      N.peds.push(p); pool.ped.push(p);
+    }
+    for (i = 0; i < N_CAR; i++) {
+      if (vehicleModelFailed[carCfg.url]) break;
+      var c = { kind: 'car', alive: false, i: i };
+      try {
+        c.model = await loadModel(carCfg.url, chassisFor('sedan', VEHICLES.sedan).y / carCfg.length);
+        tintModel(c.model, CAR_TINTS[i % CAR_TINTS.length], 0.75);
+      } catch (e) { console.warn('Traffic car model unavailable:', e && e.message || e); break; }
+      N.cars.push(c); pool.car.push(c);
+    }
+  }
+
+  /* ---------- spawn / despawn ---------- */
+  function setShown(n, v) { if (n.model) n.model.show = v; if (n.bean) n.bean.show = v; }
+  function kill(n) { n.alive = false; setShown(n, false); pool[n.kind].push(n); }
+  function place(n, seg, t, atA) {
+    n.seg = seg; n.t = t; n.fwd = atA !== false;   // fwd: travelling a→b
+    n.len = segLen(seg) || 1;
+    var u = n.fwd ? 1 : -1;
+    n.dx = u * (seg.bx - seg.ax) / n.len; n.dy = u * (seg.by - seg.ay) / n.len;
+  }
+  function spawn(kind, ppos) {
+    var list = pool[kind]; if (!list.length) return false;
+    // a random point in the ring, snapped to the street network
+    for (var tries = 0; tries < 6; tries++) {
+      var ang = Math.random() * Math.PI * 2, r = RING_MIN + Math.random() * (RING_MAX - RING_MIN);
+      var x = ppos.x + Math.sin(ang) * r, y = ppos.y + Math.cos(ang) * r;
+      var hitS = osmNearest(osmNet.roads, osmNet.roadGrid, x, y, 60);
+      if (!hitS) continue;
+      var s = hitS.seg, L = segLen(s);
+      if (L < 8) continue;
+      if (kind === 'car' ? !okForCar(s) : !okForPed(s)) continue;
+      if (kind === 'car' && (SPEED_LIMIT[roadClass(s)] === 0)) continue;
+      if (Math.hypot(hitS.x - ppos.x, hitS.y - ppos.y) < RING_MIN) continue;
+      var n = list.pop();
+      var fwd = (kind === 'car' && s.meta.oneway) ? true : Math.random() < 0.5;
+      place(n, s, hitS.t, fwd);
+      n.t = clamp(hitS.t, 0.02, 0.98);
+      n.alive = true; n.speed = kind === 'car' ? 0 : 1.2 + Math.random() * 0.5; n.side = Math.random() < 0.5 ? 1 : -1;
+      n.off = 0; n.hitT = 0; n.fall = 0; n.ground = null; n.gTick = 0;
+      n.maxSpeed = kind === 'car' ? (SPEED_LIMIT[roadClass(s)] || 7) * (0.8 + Math.random() * 0.25) : n.speed;
+      if (n.model && kind === 'ped') tintModel(n.model, CLOTHES[Math.floor(Math.random() * CLOTHES.length)], 0.45);
+      n.x = s.ax + (s.bx - s.ax) * n.t; n.y = s.ay + (s.by - s.ay) * n.t;
+      var ll = osmUnproject(n.x, n.y); n.lat = ll.lat; n.lon = ll.lon;
+      n.ground = simState.ground;   // a guess; the sampler below fixes it before the NPC is shown
+      n.needGround = true;
+      setShown(n, false);
+      return true;
+    }
+    return false;
+  }
+
+  /* ---------- per-frame ---------- */
+  var tmpP = new Cesium.Cartesian3(), hprT = new Cesium.HeadingPitchRoll();
+  function pose(n) {
+    var hdg = Math.atan2(n.dx, n.dy);
+    // perpendicular (right of travel) offset
+    var px = n.x + n.dy * n.off, py = n.y - n.dx * n.off;
+    var ll = osmUnproject(px, py); n.lat = ll.lat; n.lon = ll.lon;
+    var h = (n.ground !== null ? n.ground : 0) + (n.kind === 'car' ? CAR_SINK : 0);
+    if (n.bean) h += 0.9;
+    tmpP = Cesium.Cartesian3.fromDegrees(ll.lon, ll.lat, h, undefined, tmpP);
+    hprT.heading = hdg - Math.PI / 2 + (n.spin || 0); hprT.pitch = 0; hprT.roll = n.fall ? (n.kind === 'ped' ? 1.45 * clamp(n.fall, 0, 1) : n.fall * 0.5) : 0;
+    if (n.model) Cesium.Transforms.headingPitchRollToFixedFrame(tmpP, hprT, undefined, undefined, n.model.modelMatrix);
+    if (n.bean) n.bean.position = Cesium.Cartesian3.clone(tmpP);
+  }
+  function step(n, dt, ppos, others) {
+    var s = n.seg, u = n.fwd ? 1 : -1;
+    if (n.hitT > 0) {   // knocked: coast and tumble, then leave
+      n.hitT -= dt; n.speed *= Math.exp(-2.5 * dt); n.fall = Math.min(1, n.fall + dt * 3); n.spin = (n.spin || 0) + dt * (n.kind === 'car' ? 2.0 : 0);
+      if (n.hitT <= 0) { kill(n); return; }
+    } else if (n.kind === 'car') {
+      // follow distance: the nearest vehicle ahead within a narrow cone sets the target speed
+      var gap = 1e9;
+      for (var k = 0; k < others.length; k++) {
+        var o = others[k]; if (o === n || !o.alive) continue;
+        var rx = o.x - n.x, ry = o.y - n.y, ah = rx * n.dx + ry * n.dy;
+        if (ah < 0 || ah > 26) continue;
+        var lat = Math.abs(rx * n.dy - ry * n.dx);
+        if (lat < 2.4 && ah < gap) gap = ah;
+      }
+      var prx = ppos.x - n.x, pry = ppos.y - n.y, pah = prx * n.dx + pry * n.dy;
+      if (pah > 0 && pah < 26 && Math.abs(prx * n.dy - pry * n.dx) < 2.4 && pah < gap) gap = pah;
+      var target = gap < 26 ? clamp((gap - 6) * 0.9, 0, n.maxSpeed) : n.maxSpeed;
+      var a = target > n.speed ? 3.0 : 7.5;
+      n.speed += clamp(target - n.speed, -a * dt, a * dt);
+    }
+    var dist = n.speed * dt;
+    n.t += u * dist / n.len;
+    if (n.t >= 1 || n.t <= 0) {
+      var atB = n.t >= 1;
+      var ex = atB ? s.bx : s.ax, ey = atB ? s.by : s.ay;
+      var nx = nextSeg(s, ex, ey, n.dx, n.dy, n.kind === 'car');
+      if (!nx) {
+        if (n.kind === 'car' && s.meta.oneway) { kill(n); return; }
+        n.fwd = !n.fwd; n.t = clamp(n.t, 0.001, 0.999);   // dead end: turn round
+        n.dx = -n.dx; n.dy = -n.dy;
+      } else {
+        place(n, nx.s, nx.atA ? 0.001 : 0.999, nx.atA);
+        if (n.kind === 'car') n.maxSpeed = (SPEED_LIMIT[roadClass(nx.s)] || 7) * (0.8 + (n.i % 3) * 0.1);
+      }
+    }
+    n.x = n.seg.ax + (n.seg.bx - n.seg.ax) * n.t; n.y = n.seg.ay + (n.seg.by - n.seg.ay) * n.t;
+    var want = n.kind === 'car' ? n.seg.meta.halfWidth * 0.45 : n.side * (n.seg.meta.halfWidth + 1.7);
+    n.off += (want - n.off) * Math.min(1, 3 * dt);
+  }
+
+  N.update = function(dt, now) {
+    if (!simState || !scene) return;
+    if (!osmNet.ready || !osmNet.roads.length) return;
+    if (!building) buildPool();
+    if (lastRoads !== osmNet.roads) {
+      // new street data: positions are in a new local frame; rebind everyone from lat/lon
+      var rebound = lastRoads !== null;
+      lastRoads = osmNet.roads; adj = null;
+      if (rebound) {
+        var all = N.peds.concat(N.cars);
+        for (var q = 0; q < all.length; q++) {
+          var m = all[q]; if (!m.alive) continue;
+          var p = osmProject(m.lat, m.lon), h = osmNearest(osmNet.roads, osmNet.roadGrid, p.x, p.y, 40);
+          if (!h) { kill(m); continue; }
+          var fw = (m.dx * (h.seg.bx - h.seg.ax) + m.dy * (h.seg.by - h.seg.ay)) >= 0;
+          place(m, h.seg, clamp(h.t, 0.01, 0.99), fw);
+          m.x = h.x; m.y = h.y;
+        }
+      }
+    }
+    var air = simState.spec.kind === 'fly' && (simState.height - simState.ground) > 150;
+    var pdeg = { lat: Cesium.Math.toDegrees(simState.lat), lon: Cesium.Math.toDegrees(simState.lon) };
+    var ppos = osmProject(pdeg.lat, pdeg.lon);
+
+    // keep the ring populated: at most two spawns every ~0.4 s, never on top of the player
+    spawnClock += dt;
+    if (spawnClock > 0.4 && !air && simState.spec.kind !== 'train') {
+      spawnClock = 0;
+      var livePed = 0, liveCar = 0, i;
+      for (i = 0; i < N.peds.length; i++) if (N.peds[i].alive) livePed++;
+      for (i = 0; i < N.cars.length; i++) if (N.cars[i].alive) liveCar++;
+      var made = 0;
+      if (pool.ped.length && livePed < N_PED && made < 2) { if (spawn('ped', ppos)) made++; }
+      if (pool.car.length && liveCar < N_CAR && made < 2) { if (spawn('car', ppos)) made++; }
+    }
+
+    var spd = Math.abs(simState.speed), drive = simState.spec.kind === 'drive', foot = simState.spec.kind === 'foot';
+    var cars = N.cars;
+    var all2 = N.peds.concat(N.cars);
+    for (var j = 0; j < all2.length; j++) {
+      var n = all2[j]; if (!n.alive) continue;
+      step(n, dt, ppos, cars);
+      if (!n.alive) continue;
+      var dpx = n.x - ppos.x, dpy = n.y - ppos.y;
+      var d = Math.hypot(dpx, dpy);
+      if (d > DESPAWN || air) { kill(n); continue; }
+      // hit by the player
+      if (n.hitT <= 0 && (drive || foot) && simState.height - simState.ground < 3) {
+        var rad = n.kind === 'car' ? 2.7 : 0.95;
+        var off = n.off;
+        var wx = n.x + n.dy * off - ppos.x, wy = n.y - n.dx * off - ppos.y;
+        if (Math.hypot(wx, wy) < rad && spd > (n.kind === 'car' ? 2.5 : 3.2) && !simState.spec.water) {
+          n.hitT = n.kind === 'car' ? 5 : 3.5; n.fall = 0.01;
+          if (n.kind === 'car') { n.speed = Math.min(n.speed, 2) * 0.4; hit.car++; NX.impact(spd + n.speed); }
+          else { hit.ped++; NX.audio.burst({ type: 'lowpass', f: 600, vol: 0.4, dur: 0.22, thump: 110 }); simState.speed *= 0.93; }
+        }
+      }
+      if (n.needGround) continue;
+      pose(n);
+      if (n.model && n.kind === 'ped') {
+        // pace the walk cycle to the ground speed; hold still when knocked
+        var anims = n.model.activeAnimations;
+        if (anims && anims.length) { var an = anims.get(0); an.multiplier = n.hitT > 0 ? 0 : clamp(n.speed / 1.4, 0.4, 2.2); }
+      }
+    }
+  };
+  function sampleGrounds(dt) {
+    groundCredit = Math.min(GROUND_CREDIT_CAP, groundCredit + GROUND_CREDIT_MS);
+    var all = N.peds.concat(N.cars), guard = all.length;
+    while (groundCredit > 0 && guard-- > 0) {
+      // NPCs still waiting for a first sample go first, then the rest in rotation
+      var pick = null, i;
+      for (i = 0; i < all.length; i++) if (all[i].alive && all[i].needGround) { pick = all[i]; break; }
+      if (!pick) {
+        for (i = 0; i < all.length; i++) { var c = all[(groundRR + i) % all.length]; if (c.alive) { pick = c; groundRR = (groundRR + i + 1) % all.length; break; } }
+      }
+      if (!pick) return;
+      var t0 = performance.now(), g = sampleSurfaceAt(pick.lat, pick.lon);
+      groundCredit -= (performance.now() - t0);
+      if (g !== null) {
+        pick.ground = pick.needGround ? g : pick.ground + (g - pick.ground) * 0.6;
+        if (pick.needGround) { pick.needGround = false; setShown(pick, true); pose(pick); }
+      } else if (pick.needGround) { pick.needGround = false; setShown(pick, true); pose(pick); }   // no surface data: the player's ground stands in
+    }
+  }
+  var updateInner = N.update;
+  N.update = function(dt, now) { updateInner(dt, now); if (simState && osmNet.ready) sampleGrounds(dt); };
+  N.start = function() { N.peds.forEach(function(n) { if (n.alive) kill(n); }); N.cars.forEach(function(n) { if (n.alive) kill(n); }); };
+  NX.register('npc', N);
+})();
+
+/* ════════════════════════════════════════════════════════════
+   TIME OF DAY — after ZAVOD's sky/haze and day / dusk / night modes
+   Google's tiles carry baked daylight, so the sun (clock) drives the sky, the
+   terrain and the water glint, and a post-process grade brings the photographed
+   city down to dusk or night. Z cycles Day / Dusk / Night.
+   ════════════════════════════════════════════════════════════ */
+(function() {
+  var T = {};
+  NX.time = T;
+  var clamp = NX.clamp;
+  var MODES = [
+    { id: 'day',   label: 'Day',   hour: 12.5, dark: 0.0,  tint: [1.0, 1.0, 1.0],    sky: [0.55, 0.72, 0.86], shift: 0 },
+    { id: 'dusk',  label: 'Dusk',  hour: 18.9, dark: 0.34, tint: [1.0, 0.72, 0.5],   sky: [0.55, 0.38, 0.30], shift: -0.2 },
+    { id: 'night', label: 'Night', hour: 23.5, dark: 0.74, tint: [0.45, 0.58, 1.0],  sky: [0.06, 0.09, 0.2],  shift: -0.5 }
+  ];
+  var idx = 0, cur = { dark: 0, tint: [1, 1, 1], sky: [0.55, 0.72, 0.86], shift: 0 }, stage = null, inited = false;
+  T.mode = function() { return MODES[idx].id; };
+
+  var GRADE = [
+    'uniform sampler2D colorTexture;',
+    'uniform float u_dark;',
+    'uniform vec3 u_tint;',
+    'in vec2 v_textureCoordinates;',
+    'void main() {',
+    '  vec4 c = texture(colorTexture, v_textureCoordinates);',
+    '  float lum = dot(c.rgb, vec3(0.299, 0.587, 0.114));',
+    '  vec3 lit = c.rgb * mix(vec3(1.0), u_tint * (1.0 - u_dark * 0.85), clamp(u_dark * 2.0 + 0.2, 0.0, 1.0));',
+    '  lit = mix(lit, vec3(lum) * u_tint, u_dark * 0.25);',
+    '  float lamp = smoothstep(0.62, 0.95, lum) * u_dark;',      // bright things (signs, glass, lamps) keep their glow after dark
+    '  lit += c.rgb * lamp * 0.55;',
+    '  vec2 q = v_textureCoordinates - 0.5;',
+    '  lit *= 1.0 - dot(q, q) * (0.35 + u_dark * 0.55);',
+    '  out_FragColor = vec4(lit, c.a);',
+    '}'
+  ].join('\n');
+  T.gradeText = function() { return GRADE; };
+
+  function applyClock() {
+    if (!viewer || !simState) return;
+    var lon = Cesium.Math.toDegrees(simState.lon), m = MODES[idx];
+    var d = new Date(); var utcH = ((m.hour - lon / 15) % 24 + 24) % 24;
+    var jd = Cesium.JulianDate.fromDate(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), Math.floor(utcH), Math.round((utcH % 1) * 60))));
+    viewer.clock.shouldAnimate = false;
+    viewer.clock.currentTime = jd;
+  }
+  T.set = function(i) {
+    idx = ((i % MODES.length) + MODES.length) % MODES.length;
+    NX.lsSet('atlas_time', MODES[idx].id);
+    applyClock();
+    NX.syncButtons();
+  };
+  T.cycle = function() { T.set(idx + 1); showToast('Time: ' + MODES[idx].label); };
+
+  T.start = function() {
+    if (inited) return;
+    inited = true;
+    stage = new Cesium.PostProcessStage({
+      name: 'nx_grade', fragmentShader: GRADE,
+      uniforms: { u_dark: function() { return cur.dark; }, u_tint: function() { return new Cesium.Cartesian3(cur.tint[0], cur.tint[1], cur.tint[2]); } }
+    });
+    stage.enabled = false;
+    scene.postProcessStages.add(stage);
+    var saved = NX.lsGet('atlas_time', 'day');
+    for (var i = 0; i < MODES.length; i++) if (MODES[i].id === saved) idx = i;
+    // a deep link can pin the time of day: &t=day|dusk|night
+    try { var m = /[#&]t=(day|dusk|night)/.exec(location.hash); if (m) for (var k = 0; k < MODES.length; k++) if (MODES[k].id === m[1]) idx = k; } catch (e) {}
+    T.set(idx);
+  };
+  T.stage = function() { return stage; };
+  T.update = function(dt) {
+    if (!stage) return;
+    var m = MODES[idx], k = 1 - Math.exp(-1.6 * dt);
+    cur.dark += (m.dark - cur.dark) * k;
+    for (var i = 0; i < 3; i++) { cur.tint[i] += (m.tint[i] - cur.tint[i]) * k; cur.sky[i] += (m.sky[i] - cur.sky[i]) * k; }
+    cur.shift += (m.shift - cur.shift) * k;
+    stage.enabled = cur.dark > 0.003;
+    try { if (scene.atmosphere) scene.atmosphere.brightnessShift = cur.shift; } catch (e) {}
+    NX.water.setSky(cur.sky[0], cur.sky[1], cur.sky[2]);
+    if (frameTick % 120 === 0) applyClock();   // follow the player across time zones
+  };
+  NX.register('time', T);
+})();
+
+/* ════════════════════════════════════════════════════════════
+   GAMES — after ZAVOD's Uber fares (coney/uber.js) and its time trials
+   · Fares (any road vehicle): pick up the waiting passenger, deliver them to the
+     drop-off before the clock runs out. Pay is distance, speed and a clean car.
+   · Gates (aircraft and the jet ski): fly the rings / run the hoops in order.
+   V starts and stops whichever suits the vehicle. Both only need what is
+   already around the player (street graph, water), so they work anywhere.
+   ════════════════════════════════════════════════════════════ */
+(function() {
+  var G = {};
+  NX.game = G;
+  var clamp = NX.clamp, fmt = function(s) { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); };
+  var S = { mode: null, phase: 'idle', total: 0, count: 0, time: 0, best: { fares: +NX.lsGet('atlas_best_fares', 0), gates: +NX.lsGet('atlas_best_gates', 0) } };
+  G.state = function() { return S; };
+  var ents = [];
+  function clearEnts() { ents.forEach(function(e) { try { viewer.entities.remove(e); } catch (x) {} }); ents = []; }
+  function addEnt(o) { var e = viewer.entities.add(o); ents.push(e); return e; }
+  function bearingTo(lat, lon) {
+    var dE = (lon - Cesium.Math.toDegrees(simState.lon)) * Math.cos(simState.lat), dN = lat - Cesium.Math.toDegrees(simState.lat);
+    return Math.atan2(dE, dN);
+  }
+  function distTo(lat, lon) { return metersDeg(Cesium.Math.toDegrees(simState.lat), Cesium.Math.toDegrees(simState.lon), lat, lon); }
+
+  /* ---------- UI strip ---------- */
+  var strip = null;
+  function ensureStrip() {
+    if (strip) return strip;
+    var st = document.createElement('style');
+    st.textContent =
+      '#nxStrip{position:absolute;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:6;display:none;align-items:center;gap:10px;padding:8px 14px;border-radius:999px;background:rgba(10,19,26,.82);border:1px solid rgba(255,255,255,.14);color:#fff;font:600 .8rem/1 Inter,system-ui,sans-serif;pointer-events:none;white-space:nowrap;backdrop-filter:blur(6px)}' +
+      '#nxStrip.on{display:flex}#nxStrip .nx-tag{color:var(--gold,#f5a623);letter-spacing:.08em;font-size:.68rem}' +
+      '#nxStrip .nx-num{font-family:"Barlow Condensed",Inter,sans-serif;font-size:1rem;letter-spacing:.02em}' +
+      '#nxStrip .nx-dmg{color:#fb923c}#nxArrow{width:18px;height:18px;display:none}#nxArrow path{fill:var(--accent,#e53982)}' +
+      '@media (pointer:coarse){#nxStrip{bottom:calc(232px + env(safe-area-inset-bottom,0px))}}';
+    document.head.appendChild(st);
+    strip = document.createElement('div'); strip.id = 'nxStrip';
+    strip.innerHTML = '<svg id="nxArrow" viewBox="0 0 24 24"><path d="M12 2l7 18-7-4-7 4z"/></svg><span class="nx-tag" id="nxTag"></span><span id="nxMain"></span>';
+    $('simUI').appendChild(strip);
+    return strip;
+  }
+  function render(tag, html) {
+    ensureStrip();
+    $('nxTag').textContent = tag; $('nxMain').innerHTML = html;
+    strip.classList.add('on');
+  }
+  G.hideStrip = function() { if (strip) strip.classList.remove('on'); };
+
+  /* ---------- fares ---------- */
+  var fare = null;
+  function randomRoadPoint(fromLat, fromLon, rMin, rMax) {
+    var p = osmProject(fromLat, fromLon);
+    for (var tries = 0; tries < 14; tries++) {
+      var ang = Math.random() * Math.PI * 2, r = rMin + Math.random() * (rMax - rMin);
+      var h = osmNearest(osmNet.roads, osmNet.roadGrid, p.x + Math.sin(ang) * r, p.y + Math.cos(ang) * r, 45);
+      if (!h) continue;
+      var m = h.seg.meta, hw = (m.tags && m.tags.highway) || '';
+      if (m.tunnel || /^(pedestrian|motorway|trunk)/.test(hw)) continue;
+      var ll = osmUnproject(h.x, h.y); return { lat: ll.lat, lon: ll.lon };
+    }
+    return null;
+  }
+  function beacon(pt, color) {
+    var g = sampleSurfaceAt(pt.lat, pt.lon); if (g === null) g = simState.ground;
+    return addEnt({
+      position: Cesium.Cartesian3.fromDegrees(pt.lon, pt.lat, g + 25),
+      cylinder: { length: 50, topRadius: 2.2, bottomRadius: 2.2, material: color.withAlpha(0.32), outline: true, outlineColor: color.withAlpha(0.8) }
+    });
+  }
+  function nextFare() {
+    clearEnts();
+    var here = { lat: Cesium.Math.toDegrees(simState.lat), lon: Cesium.Math.toDegrees(simState.lon) };
+    var pick = randomRoadPoint(here.lat, here.lon, 110, 320);
+    if (!pick) { S.phase = 'wait'; return; }
+    fare = { pick: pick, drop: null, onboard: false, time: 0, dist: 0 };
+    beacon(pick, Cesium.Color.GOLD);
+    // the passenger stands at the kerb
+    var g = sampleSurfaceAt(pick.lat, pick.lon); if (g === null) g = simState.ground;
+    addEnt({ position: Cesium.Cartesian3.fromDegrees(pick.lon + 0.00003, pick.lat, g + 0.9), ellipsoid: { radii: new Cesium.Cartesian3(0.26, 0.26, 0.88), material: Cesium.Color.fromCssColorString('#e84393') } });
+    S.phase = 'pickup';
+  }
+  function fareUpdate(dt) {
+    if (!fare) { nextFare(); return; }
+    var sp = Math.abs(simState.speed);
+    if (!fare.onboard) {
+      var d = distTo(fare.pick.lat, fare.pick.lon);
+      render('FARE', 'Pick up <span class="nx-num">' + Math.round(d) + ' m</span> · <span class="nx-num">$' + S.total + '</span>');
+      setArrow(bearingTo(fare.pick.lat, fare.pick.lon));
+      if (d < 14 && sp < 5) {
+        fare.drop = randomRoadPoint(fare.pick.lat, fare.pick.lon, 480, 850);
+        if (!fare.drop) { showToast('No route found, new fare'); fare = null; return; }
+        fare.onboard = true; fare.dist = distTo(fare.drop.lat, fare.drop.lon);
+        fare.time = fare.dist * 1.05 / 9 + 22;
+        clearEnts(); beacon(fare.drop, Cesium.Color.LIMEGREEN);
+        S.phase = 'dropoff'; showToast('Passenger aboard');
+        NX.audio.burst({ type: 'bandpass', f: 1200, q: 3, vol: 0.12, dur: 0.12 });
+      }
+    } else {
+      fare.time -= dt;
+      var d2 = distTo(fare.drop.lat, fare.drop.lon);
+      render('FARE', 'Drop-off <span class="nx-num">' + Math.round(d2) + ' m</span> · <span class="nx-num">' + fmt(fare.time) + '</span> · <span class="nx-num">$' + S.total + '</span>' + ((simState.damage || 0) > 0.3 ? ' <span class="nx-dmg">· damage ' + Math.round(simState.damage * 100) + '%</span>' : ''));
+      setArrow(bearingTo(fare.drop.lat, fare.drop.lon));
+      if (d2 < 16 && sp < 5) {
+        var base = 6 + fare.dist / 100, tip = Math.max(0, fare.time) * 0.15, wreck = (simState.damage || 0) * 8;
+        var pay = Math.max(1, Math.round(base + tip - wreck));
+        S.total += pay; S.count++; fare = null;
+        showToast('Fare +$' + pay + (tip > 1 ? ' (tip $' + Math.round(tip) + ')' : ''));
+        NX.audio.burst({ type: 'bandpass', f: 2400, q: 6, vol: 0.14, dur: 0.18 });
+        if (S.total > S.best.fares) { S.best.fares = S.total; NX.lsSet('atlas_best_fares', S.total); }
+        S.phase = 'pickup'; nextFare();
+      } else if (fare.time <= 0) {
+        showToast('Fare lost'); fare = null; nextFare();
+      }
+    }
+  }
+  function setArrow(brg) {
+    var a = $('nxArrow'); if (!a) return;
+    a.style.display = 'block';
+    a.style.transform = 'rotate(' + ((brg - simState.heading) * 180 / Math.PI) + 'deg)';
+  }
+
+  /* ---------- gates ---------- */
+  var gates = [], gateIdx = 0, prevAlong = null;
+  function gateRadius() { var s = simState.spec; return s.water ? 11 : (s.climb === 15 ? 20 : (s.topSpeed > 200 ? 42 : 30)); }
+  function lastGatePose() {
+    if (gates.length) { var g = gates[gates.length - 1]; return { lat: g.lat, lon: g.lon, h: g.h, alt: g.alt }; }
+    return { lat: Cesium.Math.toDegrees(simState.lat), lon: Cesium.Math.toDegrees(simState.lon), h: simState.heading, alt: simState.height };
+  }
+  function makeGate() {
+    var base = lastGatePose(), water = !!simState.spec.water, R = gateRadius();
+    var spd = Math.max(Math.abs(simState.speed), water ? 8 : 25);
+    var dist = water ? 150 : clamp(spd * 6, 170, 1700);
+    for (var tries = 0; tries < 14; tries++) {
+      var turn = (Math.random() - 0.5) * (water ? 1.3 : 0.75) * (tries > 6 ? 2 : 1);
+      var h = base.h + turn;
+      var e = Math.sin(h) * dist, n = Math.cos(h) * dist;
+      var lat = base.lat + n / EARTH_R * 180 / Math.PI, lon = base.lon + e / (EARTH_R * Math.cos(base.lat * Math.PI / 180)) * 180 / Math.PI;
+      if (water) {
+        var w1 = NX.water.isWater(lat, lon), w2 = NX.water.isWater((lat + base.lat) / 2, (lon + base.lon) / 2);
+        if (w1 === false || w2 === false) continue;   // open water only (unknown data accepts)
+      }
+      var ground = sampleSurfaceAt(lat, lon); if (ground === null) ground = simState.ground;
+      var alt = water ? ground + R * 0.25 : clamp(base.alt + (Math.random() - 0.5) * 120, ground + 70, ground + 420);
+      return { lat: lat, lon: lon, h: h, alt: alt, R: R, ground: ground };
+    }
+    return null;
+  }
+  function gateEntity(g, color, width) {
+    var c = Cesium.Cartesian3.fromDegrees(g.lon, g.lat, g.alt);
+    var m = Cesium.Transforms.eastNorthUpToFixedFrame(c), pts = [];
+    var rx = Math.cos(g.h), ry = -Math.sin(g.h);
+    for (var i = 0; i <= 28; i++) {
+      var a = i / 28 * Math.PI * 2, lx = Math.cos(a) * g.R, lu = Math.sin(a) * g.R;
+      pts.push(Cesium.Matrix4.multiplyByPoint(m, new Cesium.Cartesian3(rx * lx, ry * lx, lu), new Cesium.Cartesian3()));
+    }
+    return viewer.entities.add({ polyline: { positions: pts, width: width, material: new Cesium.PolylineGlowMaterialProperty({ glowPower: 0.3, color: color }) } });
+  }
+  function rebuildGateVisuals() {
+    gates.forEach(function(g) { if (g.ent) { try { viewer.entities.remove(g.ent); } catch (e) {} g.ent = null; } });
+    for (var i = gateIdx; i < Math.min(gates.length, gateIdx + 3); i++) {
+      gates[i].ent = gateEntity(gates[i], i === gateIdx ? Cesium.Color.GOLD : Cesium.Color.WHITE.withAlpha(0.7), i === gateIdx ? 9 : 5);
+    }
+  }
+  function topUpGates() {
+    while (gates.length < gateIdx + 4) { var g = makeGate(); if (!g) break; gates.push(g); }
+    rebuildGateVisuals();
+  }
+  function gatesUpdate(dt) {
+    S.time -= dt;
+    var g = gates[gateIdx];
+    if (!g) { topUpGates(); g = gates[gateIdx]; if (!g) { endGame('No more water ahead'); return; } }
+    var lat = Cesium.Math.toDegrees(simState.lat), lon = Cesium.Math.toDegrees(simState.lon);
+    var dE = (lon - g.lon) * Math.cos(simState.lat) * EARTH_R * Math.PI / 180, dN = (lat - g.lat) * EARTH_R * Math.PI / 180, dU = simState.height - g.alt;
+    var along = dE * Math.sin(g.h) + dN * Math.cos(g.h), lateral = dE * Math.cos(g.h) - dN * Math.sin(g.h);
+    var water = !!simState.spec.water;
+    var off = water ? Math.abs(lateral) : Math.hypot(lateral, dU);
+    if (prevAlong !== null && prevAlong < 0 && along >= 0 && Math.abs(along) < 80) {
+      if (off <= g.R * 1.1) {
+        S.count++; S.time += water ? 9 : 12; showToast('Gate ' + S.count);
+        NX.audio.burst({ type: 'bandpass', f: 1800, q: 5, vol: 0.14, dur: 0.16 });
+        if (S.count > S.best.gates) { S.best.gates = S.count; NX.lsSet('atlas_best_gates', S.count); }
+      } else { S.time -= 3; showToast('Missed'); }
+      gateIdx++; prevAlong = null; topUpGates();
+    } else prevAlong = along;
+    var d = Math.hypot(dE, dN, water ? 0 : dU);
+    render(water ? 'HOOPS' : 'RINGS', '<span class="nx-num">' + S.count + '</span> · next <span class="nx-num">' + Math.round(d) + ' m</span> · <span class="nx-num">' + fmt(S.time) + '</span>');
+    setArrow(Math.atan2(-dE, -dN));
+    if (S.time <= 0) endGame('Time');
+  }
+
+  /* ---------- control ---------- */
+  function endGame(why) {
+    var m = S.mode;
+    if (m === 'gates') showToast((why || 'Done') + ' · ' + S.count + ' gates · best ' + S.best.gates);
+    else if (m === 'fares') showToast('Shift over · $' + S.total + ' · best $' + S.best.fares);
+    clearEnts(); gates.forEach(function(g) { if (g.ent) { try { viewer.entities.remove(g.ent); } catch (e) {} } });
+    gates = []; gateIdx = 0; prevAlong = null; fare = null;
+    S.mode = null; S.phase = 'idle'; G.hideStrip(); var a = $('nxArrow'); if (a) a.style.display = 'none';
+    NX.syncButtons();
+  }
+  G.stop = function() { if (S.mode) endGame('Stopped'); };
+  G.toggle = function() {
+    if (!simState) return;
+    if (S.mode) { endGame('Stopped'); return; }
+    var s = simState.spec;
+    S.total = 0; S.count = 0;
+    if (s.kind === 'fly' || s.water) {
+      S.mode = 'gates'; S.phase = 'run'; S.time = 40; gates = []; gateIdx = 0; prevAlong = null;
+      topUpGates();
+      if (!gates.length) { S.mode = null; S.phase = 'idle'; showToast(s.water ? 'No open water here' : 'Could not place rings'); return; }
+      showToast(s.water ? 'Hoops: run them in order' : 'Rings: fly through in order');
+    } else if (s.kind === 'drive') {
+      if (!osmNet.ready) { showToast('Needs street data (still loading?)'); return; }
+      S.mode = 'fares'; S.phase = 'pickup'; fare = null;
+      showToast('Fares: pick up the passenger'); nextFare();
+    } else { showToast('Get in a car, jet ski or aircraft'); return; }
+    NX.syncButtons();
+  };
+  G.update = function(dt) {
+    if (isPaused) return;
+    if (!S.mode) {
+      // no game running: the strip is only a damage warning
+      var dmg = simState.damage || 0;
+      if (dmg > 0.25) { render('DAMAGE', '<span class="nx-dmg">' + Math.round(dmg * 100) + '%</span> \u00b7 B repairs'); var a0 = $('nxArrow'); if (a0) a0.style.display = 'none'; }
+      else G.hideStrip();
+      return;
+    }
+    var s = simState.spec;
+    if (S.mode === 'gates' && !(s.kind === 'fly' || s.water)) { endGame('Left the vehicle'); return; }
+    if (S.mode === 'fares' && !(s.kind === 'drive' && !s.water)) { endGame('Left the car'); return; }
+    if (S.mode === 'gates') gatesUpdate(dt); else fareUpdate(dt);
+  };
+  G.start = function() { G.stop(); };
+  NX.register('game', G);
+})();
+
+/* ════════════════════════════════════════════════════════════
+   UI WIRING
+   ════════════════════════════════════════════════════════════ */
+(function() {
+  var wired = false;
+  NX.wireUi = function() {
+    if (wired) return; wired = true;
+    var host = $('roadBtn') && $('roadBtn').parentNode;
+    function addBtn(id, label, fn) {
+      if (!host || $(id)) return;
+      var b = document.createElement('button'); b.className = 'hud-btn'; b.id = id; b.type = 'button'; b.textContent = label; b.onclick = fn;
+      host.appendChild(b);
+    }
+    addBtn('soundBtn', 'Sound: On', function() { NX.toggleMute(); });
+    addBtn('radioBtn', 'Radio: Off', function() { NX.radioToggle(); });
+    addBtn('timeBtn', 'Time: Day', function() { NX.time.cycle(); NX.syncButtons(); });
+    addBtn('gameBtn', 'Game: Off', function() { togglePause(false); NX.game.toggle(); });
+    window.addEventListener('keydown', function(e) {
+      if (e.repeat) return;
+      if (e.code === 'KeyV') NX.game.toggle();
+      else if (e.code === 'KeyZ') NX.time.cycle();
+    });
+    var oldSync = NX.syncButtons;
+    NX.syncButtons = function() {
+      oldSync();
+      var t = $('timeBtn'); if (t) t.textContent = 'Time: ' + ({ day: 'Day', dusk: 'Dusk', night: 'Night' }[NX.time.mode()]);
+      var g = $('gameBtn'); if (g) g.textContent = 'Game: ' + (NX.game.state().mode ? 'On' : 'Off');
+    };
+  };
+  var oldStart = NX.start;
+  NX.start = function() { NX.wireUi(); oldStart(); NX.syncButtons(); };
+})();
 
 </script>
 </body>
