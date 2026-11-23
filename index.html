@@ -2836,7 +2836,7 @@ var ROAD_MODES = [
   { id: 'assist', label: 'Assist', pull: 0.45, maxDist: 45 },
   { id: 'locked', label: 'Locked', pull: 1.0,  maxDist: 90 }
 ];
-var roadModeIdx = 1;
+var roadModeIdx = 0;  // Free by default: assist pulled the car off overpasses
 var stickRight = false;
 
 function loadHandPref() {
@@ -4682,8 +4682,11 @@ function stepTrain(input, dt) {
    and refusing the second one pins the car in place forever. */
 var wallProbe = { blocked: false, tick: -1 };
 
+// Climb guard off: overpasses and elevated structures read as walls to it.
+var CLIMB_GUARD = false;
+
 function drivePathBlocked(state, dt) {
-  if (!scene) return false;
+  if (!CLIMB_GUARD || !scene) return false;
   // One sample every other frame is plenty: at 120 km/h that is half a metre
   // of travel against a two-metre lookahead.
   if (frameTick === wallProbe.tick || frameTick % 2 !== 0) return wallProbe.blocked;
